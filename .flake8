@@ -1,0 +1,37 @@
+[flake8]
+# Keep lines < 95 chars (your requirement)
+max-line-length = 94
+
+# Reasonable defaults for app + ML repos
+select = E,F,W
+exclude =
+	.git,
+	__pycache__,
+	.venv,
+	venv,
+	env,
+	build,
+	dist,
+	.eggs,
+	.mypy_cache,
+	.pytest_cache,
+	.streamlit,
+	.cache,
+	data,
+	notebooks,
+	.ipynb_checkpoints
+
+# Avoid noisy/low-signal warnings in practical projects
+ignore =
+	E203,
+	W503
+
+# Keep complexity reasonable
+max-complexity = 12
+
+# Show summary counts at the end
+count = True
+statistics = True
+
+# Make output easier to scan
+show-source = True

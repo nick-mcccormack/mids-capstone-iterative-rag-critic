@@ -1,0 +1,63 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local env
+.env
+.env.*
+*.pem
+*.key
+secrets*.json
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Data / model artifacts (don’t version large binary outputs)
+data/
+datasets/
+models/
+checkpoints/
+runs/
+wandb/
+mlruns/
+
+# Hugging Face / Transformers caches (never commit)
+.cache/
+hf_cache/
+*.arrow
+*.parquet
+*.pt
+*.bin
+*.safetensors
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Jupyter
+.ipynb_checkpoints/

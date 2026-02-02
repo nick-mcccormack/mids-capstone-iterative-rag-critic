@@ -1,0 +1,61 @@
+# VCS
+.git
+.gitignore
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Large local data / model artifacts (common culprits)
+data/
+datasets/
+cache/
+.cache/
+hf_cache/
+models/
+checkpoints/
+runs/
+wandb/
+mlruns/
+logs/
+*.log
+
+# Hugging Face / Transformers caches if stored in-repo
+*.arrow
+*.parquet
+*.jsonl
+*.pkl
+*.pt
+*.bin
+*.safetensors
