@@ -3,6 +3,7 @@ import streamlit as st
 from datasets import load_dataset
 
 DATASET = os.environ.get("DATASET")
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 def state_init() -> None:
 	"""Initialize Streamlit session state for the RAAR demo.
@@ -18,7 +19,10 @@ def state_init() -> None:
 	- The datasets are loaded from Hugging Face via ``datasets.load_dataset``.
 	"""
 	if "queries" not in st.session_state:
-		st.session_state["queries"] = load_dataset(DATASET)
+		try:
+			st.session_state["queries"] = load_dataset(DATASET, token=HF_TOKEN)
+		except TypeError:
+			st.session_state["queries"] = load_dataset(DATASET, use_auth_token=DATASET)
 
 	if "query" not in st.session_state:
 		st.session_state["query"] = None
