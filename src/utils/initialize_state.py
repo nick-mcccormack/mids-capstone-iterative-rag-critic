@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 from datasets import load_dataset
 
+from src.utils.env import get_env_optional
 
 def _get_env_optional(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
@@ -16,9 +17,9 @@ def _get_env_optional(name: str, default: str = "") -> str:
 
 @st.cache_data(show_spinner=False)
 def _load_hotpot_queries() -> Dict[str, Dict[str, Any]]:
-    dataset = _get_env_optional("DATASET", "hotpotqa/hotpot_qa")
-    setting = _get_env_optional("DATA_SETTING", "distractor")
-    hf_token = os.environ.get("HF_TOKEN")
+    dataset = get_env_optional("DATASET", "hotpotqa/hotpot_qa")
+    setting = get_env_optional("DATA_SETTING", "distractor")
+    hf_token = get_env_optional("HF_TOKEN", "")
 
     ds = load_dataset(dataset, setting, token=hf_token)
     train_df = ds["train"].to_pandas()
