@@ -2,12 +2,14 @@
 
 This module embeds the query with a sentence-transformers model and performs a
 dense vector search against a Qdrant collection.
+
+Compatible with qdrant-client >= 1.16.0 (uses `query_points`).
 """
 
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 
 from qdrant_client import QdrantClient
@@ -76,19 +78,27 @@ def retrieve_contexts(query: str, top_k: int) -> List[Dict[str, Any]]:
     ValueError
         If ``top_k`` is not a positive integer.
     RuntimeError
-        If required environment variables are missing.
+        If required environment variables are missing or Qdrant is misconfigured.
     """
     if not isinstance(top_k, int) or top_k <= 0:
         raise ValueError("top_k must be a positive integer.")
 
     collection = get_env_required("QDRANT_COLLECTION")
+    vector_name = get_env_optional("QDRANT_VECTOR_NAME", "") or None
+
     embedder = get_embedder()
     qdrant = get_qdrant_client()
 
     q_vec = embedder.encode(query, normalize_embeddings=True).tolist()
 
     try:
-        hits = qdrant.query_points(collection_name=collection, query=q_vec, limit=top_k)
+        resp = qdrant.query_points(
+            collection_name=collection,
+            query=q_vec,
+            limit=top_k,
+            with_payload=True,
+            using=vector_name,
+        )
     except UnexpectedResponse as exc:
         # Common misconfig: dashboard URL or reverse-proxy non-API path.
         if "404" in str(exc) and "page not found" in str(exc).lower():
@@ -100,7 +110,7 @@ def retrieve_contexts(query: str, top_k: int) -> List[Dict[str, Any]]:
         raise
 
     results: List[Dict[str, Any]] = []
-    for h in hits:
+    for h in resp.points:
         payload = h.payload or {}
         results.append(
             {
@@ -110,4 +120,5 @@ def retrieve_contexts(query: str, top_k: int) -> List[Dict[str, Any]]:
                 "text": payload.get("text") or "",
             }
         )
+
     return results
