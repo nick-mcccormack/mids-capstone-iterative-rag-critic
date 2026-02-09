@@ -11,9 +11,6 @@ from datasets import load_dataset
 
 from src.utils.env import get_env_optional
 
-def _get_env_optional(name: str, default: str = "") -> str:
-    return os.environ.get(name, default)
-
 
 @st.cache_data(show_spinner=False)
 def _load_hotpot_queries() -> Dict[str, Dict[str, Any]]:
