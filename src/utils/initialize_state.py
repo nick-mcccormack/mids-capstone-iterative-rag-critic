@@ -11,14 +11,14 @@ from datasets import load_dataset
 
 from src.utils.env import get_env_optional
 
-
 @st.cache_data(show_spinner=False)
 def _load_hotpot_queries() -> Dict[str, Dict[str, Any]]:
     dataset = get_env_optional("DATASET", "hotpotqa/hotpot_qa")
     setting = get_env_optional("DATA_SETTING", "distractor")
     hf_token = get_env_optional("HF_TOKEN", "")
 
-    ds = load_dataset(dataset, setting, token=hf_token)
+    ds = load_dataset(dataset, setting)
+
     train_df = ds["train"].to_pandas()
     train_df["dataset"] = "train"
     val_df = ds["validation"].to_pandas()
