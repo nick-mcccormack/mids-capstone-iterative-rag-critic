@@ -61,3 +61,6 @@ hf_cache/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Other
+_ignore/

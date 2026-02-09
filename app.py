@@ -1,141 +1,187 @@
-import os
-from pathlib import Path
-import pandas as pd
+"""Streamlit UI for evaluating No-RAG, RAG, RAG+Rerank, and RAAR on HotpotQA.
 
+The walkthrough tabs use a semantic storyboard (not a raw timeline):
+- Plan / Decompose
+- Retrieve
+- Rerank
+- Draft
+- Critique
+- Targeted Retrieve
+- Revision
+- Stop
+- Judge
+
+A collapsible "Raw trace" is still available for debugging.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
 
-from src.rag.pipeline import run_pipeline
-from src.utils.initialize_state import state_init
+from src.utils.metrics import build_response_metrics, build_context_metrics
 from src.utils.execution_flow import go_to_main, go_to_results
-from src.utils.calcs import add_f1_score_col
-from src.utils.formatting import render_contexts
-
-PROJECT_ROOT = Path(__file__).resolve().parent
-LOGO_PATH = os.path.join(PROJECT_ROOT, "src", "images", "logo.jpg")
-
-state_init()
-
-st.set_page_config(page_title="RAAR Demo", page_icon=str(LOGO_PATH))
-
-st.markdown(
-	"<h2 style='text-align: center;'>Retrieval-Aware Adversarial RAG - Demo</h2>",
-	unsafe_allow_html=True
+from src.utils.streamlit import (
+    center_header, render_contexts, render_raw_trace,
+    render_story_chapter, render_storyboard, render_method_tab
 )
-st.divider()
 
-if not st.session_state["generate_answer"]:
-	st.markdown("<h5 style='text-align: center;'>Background</h5>", unsafe_allow_html=True)
-	st.markdown(
-		"""
-		<div style="text-align: center;">
-			This project targets a core RAG failure mode: inability to self-correct
-			when retrieved context is poorly ranked or insufficient. RAAR introduces
-			a retrieval-aware challenger that probes the system output with skeptical
-			questions tied to the retrieved documents, forcing justification against
-			evidence. When justification fails, the system triggers corrective action
-			such as reranking or additional targeted retrieval.
-		</div>
-		""",
-		unsafe_allow_html=True,
-	)
+from src.utils.initialize_state import state_init
 
-	# Replace divider with vertical space
-	st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
 
-	left, mid, right = st.columns([1, 2, 1])
-	with mid:
-		st.button("Test System", on_click=go_to_results, use_container_width=True)
+ROOT = Path(__file__).resolve().parent
+LOGO_PATH = ROOT / "src" / "images" / "logo.jpg"
 
-else:
-	st.markdown("<h5 style='text-align: center;'>Results Summary</h5>", unsafe_allow_html=True)
 
-	query = st.session_state["query"]
-	gold_answer = st.session_state["gold_answer"]
-	resp_temp = 0.2
-	eval_temp = 0.2
+def main() -> None:
+    st.set_page_config(
+        page_title="HotpotQA RAG Evaluator",
+        page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "",
+        layout="wide",
+    )
+    state_init()
 
-	no_rag = run_pipeline(
-		query=query,
-		gold_answer=gold_answer,
-		retrieve_top_k=None,
-		rerank_top_k=None,
-		temperature_resp=resp_temp,
-		temperature_eval=eval_temp,
-	)
+    page = st.session_state.get("page", "main")
+    if page == "main":
+        center_header("HotpotQA RAG Evaluator")
+        st.write("Select a row from the HotpotQA dataset or test a random query")
+        st.caption("Runs: No-RAG, RAG, RAG+Rerank, RAAR (each with a semantic storyboard).")
 
-	basic_rag = run_pipeline(
-		query=query,
-		gold_answer=gold_answer,
-		retrieve_top_k=3,
-		rerank_top_k=None,
-		temperature_resp=resp_temp,
-		temperature_eval=eval_temp,
-	)
+        st.dataframe(
+            st.session_state["queries"][["level", "type", "query", "gold_answer"]],
+            column_config={
+                "level": "Difficulty Level",
+                "type": "Type" ,
+                "query": "Query",
+                "gold_answer": "Gold Answer" ,
+            },
+            use_container_width=True,
+            hide_index=True,
+            on_select=go_to_results,
+            selection_mode="single-row",
+            key="query_selector_key",
+        )
 
-	raar = run_pipeline(
-		query=query,
-		gold_answer=gold_answer,
-		retrieve_top_k=10,
-		rerank_top_k=3,
-		temperature_resp=resp_temp,
-		temperature_eval=eval_temp,
-	)
+        st.divider()
 
-	with st.expander("Evaluated Responses", expanded=True):
-		no_rag_ans = no_rag.get("answer")
-		basic_rag_ans = basic_rag.get("answer")
-		raar_ans = raar.get("answer")
-		st.markdown(
-			"**Query:**\n"
-			f"{query}\n\n"
-			f"**Gold Answer:**\n"
-			f"{gold_answer}\n\n"
-			"**Baseline (No Rag):**\n"
-			f"{no_rag_ans}\n\n"
-			"**Basic RAG:**\n"
-			f"{basic_rag_ans}\n\n"
-			"**RAAR:**\n"
-			f"{raar_ans}"
-		)
-	
-		no_rag_eval = no_rag.get("evaluation")
-		basic_rag_eval = basic_rag.get("evaluation")
-		raar_eval = raar.get("evaluation")
+        _, col_b = st.columns([4, 1])
+        with col_b:
+            st.button("Random Query", use_container_width=True, on_click=go_to_results)
 
-		st.markdown("**Response Evaluation:**")
-		ans_metrics = pd.DataFrame(
-			data=[no_rag_eval, basic_rag_eval, raar_eval],
-			index=["No RAG", "Basic RAG", "RAAR"],
-		)[["answer_precision", "answer_completeness"]]
-		ans_metrics.columns = ["precision", "recall"]
-		ans_metrics = add_f1_score_col(
-			df=ans_metrics,
-			precision_col="precision",
-			recall_col="recall",
-			out_col="f1_score",
-		)
-		st.dataframe(data=ans_metrics, hide_index=False, use_container_width=True)
+    elif st.session_state["page"] == "results":
+        query = st.session_state.get("query", "")
+        gold_answer = st.session_state.get("gold_answer", "")
+        results = st.session_state.get("run_results", "")
 
-		st.markdown("**Context Evaluation:**")
-		context_metrics = pd.DataFrame(
-			data=[basic_rag_eval, raar_eval],
-			index=["Basic RAG", "RAAR"],
-		)[["faithfulness_to_context", "context_precision", "context_completeness"]]
-		context_metrics.columns = ["faithfulness", "precision", "recall"]
-		context_metrics = add_f1_score_col(
-			df=context_metrics,
-			precision_col="precision",
-			recall_col="recall",
-			out_col="f1_score",
-		)
-		st.dataframe(data=context_metrics, hide_index=False, use_container_width=True)
+        tab_summary, tab_rag, tab_rerank, tab_raar = st.tabs(
+            [
+                "Results Summary",
+                "Basic RAG Walkthrough",
+                "RAG + Rerank Walkthrough",
+                "RAAR Walkthrough",
+            ]
+        )
 
-	with st.expander("Contexts - Basic RAG", expanded=False):
-		render_contexts(basic_rag.get("contexts", []), show_rerank=False)
+        with tab_summary:
+            center_header("Evaluated Responses")
 
-	with st.expander("Contexts - RAAR", expanded=False):
-		render_contexts(raar.get("contexts", []), show_rerank=True) 
+            with st.expander("Question", expanded=True):
+                st.markdown(f"**Query:** {query}")
+                st.markdown(f"**Gold Answer:** {gold_answer}")
 
-	left, mid, right = st.columns([1, 1, 1])
-	with left:
-		st.button("⏮ Back", on_click=go_to_main, use_container_width=True)
+            with st.expander("Evaluated Responses", expanded=True):
+                st.markdown("#### No RAG Baseline")
+                st.write(results["no_rag"].get("answer", ""))
+                st.markdown("#### Basic RAG")
+                st.write(results["rag"].get("answer", ""))
+                st.markdown("#### RAG + Rerank")
+                st.write(results["rag_rerank"].get("answer", ""))
+                st.markdown("#### RAAR")
+                st.write(results["raar"].get("answer", ""))
+
+            st.subheader("Response Metrics")
+            st.dataframe(
+                build_response_metrics(results),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            st.subheader("Context Metrics")
+            st.dataframe(
+                build_context_metrics(results),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            with st.expander("Contexts – Basic RAG", expanded=False):
+                render_contexts(
+                    results["rag"].get("contexts") or [],
+                    show_rerank=False,
+                    show_retrieval_meta=True,
+                )
+
+            with st.expander("Contexts – RAG + Rerank", expanded=False):
+                render_contexts(
+                    results["rag_rerank"].get("contexts") or [],
+                    show_rerank=True,
+                    show_retrieval_meta=True,
+                )
+
+            with st.expander("Contexts – RAAR", expanded=False):
+                render_contexts(
+                    results["raar"].get("contexts") or [],
+                    show_rerank=True,
+                    show_retrieval_meta=True,
+                )
+
+            col_a, _ = st.columns([1, 4])
+            with col_a:
+                st.button(
+                    "New Query",
+                    use_container_width=True,
+                    on_click=go_to_main,
+                    key=f"go_back_results"
+                )
+
+        with tab_rag:
+            render_method_tab("Basic RAG Walkthrough", results["rag"], mode="rag")
+            col_a, _ = st.columns([1, 4])
+            with col_a:
+                st.button(
+                    "New Query",
+                    use_container_width=True,
+                    on_click=go_to_main,
+                    key=f"go_back_rag"
+                )
+
+        with tab_rerank:
+            render_method_tab(
+                "RAG + Rerank Walkthrough",
+                results["rag_rerank"],
+                mode="rag_rerank",
+            )
+            col_a, _ = st.columns([1, 4])
+            with col_a:
+                st.button(
+                    "New Query",
+                    use_container_width=True,
+                    on_click=go_to_main,
+                    key=f"go_back_rerank"
+                )
+
+        with tab_raar:
+            render_method_tab("RAAR Walkthrough", results["raar"], mode="raar")
+            col_a, _ = st.columns([1, 4])
+            with col_a:
+                st.button(
+                    "New Query",
+                    use_container_width=True,
+                    on_click=go_to_main,
+                    key=f"go_back_raar"
+                )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,56 +1,75 @@
-import os
+"""VoyageAI reranker wrapper."""
+
+from __future__ import annotations
+
 from functools import lru_cache
 from typing import Any, Dict, List
 
 import voyageai
 
-RERANK_MODEL = os.getenv("RERANK_MODEL")
-VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY")
+from src.utils.env import get_env_required
+
+
+@lru_cache(maxsize=1)
+def get_voyage_client() -> voyageai.Client:
+    """Create and cache a Voyage client."""
+    api_key = get_env_required("VOYAGE_API_KEY")
+    return voyageai.Client(api_key=api_key)
+
 
 def rerank_contexts(
-	query: str,
-	candidates: List[Dict[str, Any]],
-	top_k: int,
+    query: str,
+    candidates: List[Dict[str, Any]],
+    top_k: int,
 ) -> List[Dict[str, Any]]:
-	"""Rerank retrieved candidates using Voyage rerank API.
+    """Rerank retrieved candidates using Voyage rerank API.
 
-	Parameters
-	----------
-	query : str
-		User query string.
-	candidates : list of dict
-		Candidates returned by retrieval. Each dict should contain ``title`` and
-		``text`` keys (empty strings are acceptable).
-	top_k : int
-		Number of reranked results to return.
+    Parameters
+    ----------
+    query:
+        The query used for reranking.
+    candidates:
+        Candidate contexts (dicts with ``title`` and ``text`` at minimum).
+    top_k:
+        Maximum number of contexts to keep after reranking.
 
-	Returns
-	-------
-	list of dict
-		Top reranked candidates, each extended with:
-		- rerank_score : float
-	"""
-	if not candidates:
-		return []
+    Returns
+    -------
+    list of dict
+        Reranked contexts, each with an added ``rerank_score`` field.
 
-	documents: List[str] = []
-	for c in candidates:
-		content = (f"{c.get('title', '')}\n{c.get('text', '')}").strip()
-		documents.append(content)
+    Raises
+    ------
+    ValueError
+        If ``top_k`` is not a positive integer.
+    RuntimeError
+        If required environment variables are missing.
+    """
+    if not candidates:
+        return []
 
-	vo = voyageai.Client(api_key=VOYAGE_API_KEY)
-	rr = vo.rerank(
-		query=query,
-		documents=documents,
-		model=RERANK_MODEL,
-		top_k=min(top_k, len(documents)),
-	)
+    if not isinstance(top_k, int) or top_k <= 0:
+        raise ValueError("top_k must be a positive integer.")
 
-	reranked: List[Dict[str, Any]] = []
-	for r in rr.results:
-		c = candidates[r.index]
-		item = dict(c)
-		item["rerank_score"] = float(r.relevance_score)
-		reranked.append(item)
+    model = get_env_required("RERANK_MODEL")
 
-	return reranked
+    documents: List[str] = []
+    for c in candidates:
+        content = f"{c.get('title', '')}\n{c.get('text', '')}".strip()
+        documents.append(content)
+
+    vo = get_voyage_client()
+    rr = vo.rerank(
+        query=query,
+        documents=documents,
+        model=model,
+        top_k=min(top_k, len(documents)),
+    )
+
+    reranked: List[Dict[str, Any]] = []
+    for r in rr.results:
+        item = dict(candidates[r.index])
+        item["rerank_score"] = float(r.relevance_score)
+        reranked.append(item)
+
+    return reranked

@@ -1,35 +1,37 @@
+"""Simple Streamlit navigation callbacks."""
+
+from __future__ import annotations
+
+import random
 import streamlit as st
 
-from src.utils.calcs import pick_random_query
+from src.utils.streamlit import run_all_pipelines
 
-def go_to_main():
-	"""Reset the current selection and return the app flow to the main view.
+def go_to_main() -> None:
+    """Return to the main input view."""
+    st.session_state["query"] = ""
+    st.session_state["gold_answer"] = ""
+    st.session_state["run_results"] = None
+    st.session_state["query_selector"] = None
+    st.session_state["page"] = "main"
 
-	This callback clears the active query and its associated gold answer from
-	session state and sets `generate_answer` to `False` so downstream UI logic
-	can render the main/input view.
-	
-	Returns
-	-------
-	None
-	"""
-	st.session_state["query"] = None
-	st.session_state["gold_answer"] = None
-	st.session_state["generate_answer"] = False
 
-def go_to_results():
-	"""Set the current query/answer pair and advance the app flow to results.
+def go_to_results() -> None:
+	state = st.session_state.get("query_selector_key", {})
+	selection = state.get("selection", {})
+	rows = selection.get("rows", [])
 
-	This callback selects a random (query, gold_answer) pair from the query pool
-	stored in `st.session_state["queries"]`, writes the selection into session
-	state, and flips the `generate_answer` flag to `True` so downstream UI logic
-	can render the results/answer-generation view.
+	if rows:
+		idx = rows[0]
+		df = st.session_state["queries"]
+		st.session_state["query"] = str(df.iloc[idx]["query"])
+		st.session_state["gold_answer"] = str(df.iloc[idx]["gold_answer"])
+		run_all_pipelines(st.session_state["query"], st.session_state["gold_answer"])
+	else:
+		idx = random.choice(range(len(st.session_state["queries"])))
+		example = st.session_state["queries"].iloc[[idx]]
+		st.session_state["query"] = example.get("query").values[0]
+		st.session_state["gold_answer"] =st.session_state["gold_answer"]
+		run_all_pipelines(st.session_state["query"], st.session_state["gold_answer"])
 
-	Returns
-	-------
-	None
-	"""
-	st.session_state["query"], st.session_state["gold_answer"] = pick_random_query(
-		st.session_state["queries"]
-	)
-	st.session_state["generate_answer"] = True
+	st.session_state["page"] = "results"
