@@ -88,7 +88,7 @@ def retrieve_contexts(query: str, top_k: int) -> List[Dict[str, Any]]:
     q_vec = embedder.encode(query, normalize_embeddings=True).tolist()
 
     try:
-        hits = qdrant.query_points(collection_name=collection, query_vector=q_vec, limit=top_k)
+        hits = qdrant.query_points(collection_name=collection, query=q_vec, limit=top_k)
     except UnexpectedResponse as exc:
         # Common misconfig: dashboard URL or reverse-proxy non-API path.
         if "404" in str(exc) and "page not found" in str(exc).lower():
