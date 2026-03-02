@@ -5,16 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from src.utils.aws_secrets import bootstrap_env
-
-
-def _load_queries_df() -> pd.DataFrame:
-	path = (os.getenv("BENCHMARK_CSV_PATH") or "").strip()
-	if not path:
-		return pd.DataFrame(columns=["level", "type", "query", "gold_answer"])
-	try:
-		return pd.read_csv(path)
-	except Exception:
-		return pd.DataFrame(columns=["level", "type", "query", "gold_answer"])
+from hotpotqa.load_data import load_hotpotqa_queries
 
 
 def state_init() -> None:
@@ -29,5 +20,5 @@ def state_init() -> None:
 	st.session_state.setdefault("gold_answer", None)
 	st.session_state.setdefault("selected_row", None)
 
-	df = _load_queries_df()
+	df = load_hotpotqa_queries()
 	st.session_state["queries_df"] = df
