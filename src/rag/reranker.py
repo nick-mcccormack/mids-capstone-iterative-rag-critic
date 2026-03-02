@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -8,14 +9,20 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from src.observability.payloads import summarize_contexts
 
 
+def _require_env(name: str) -> str:
+	val = os.getenv(name)
+	if not val or not str(val).strip():
+		raise RuntimeError(f"missing_env: {name}")
+	return str(val)
+
+
 @lru_cache(maxsize=1)
 def _get_reranker() -> Tuple[Any, Any]:
 	"""
 	Load and cache a cross-encoder reranker.
 	"""
-	import os
+	model_id = _require_env("RERANKER")
 
-	model_id = os.getenv("RERANKER")
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	model = AutoModelForSequenceClassification.from_pretrained(model_id)
 	model.eval()

@@ -35,7 +35,6 @@ class PipelineConfig:
 
 	eval_temperature: float = 0.0
 	eval_max_tokens: int = 2048
-	ragas_inference_profile: str = ""
 
 
 RagState = Dict[str, Any]

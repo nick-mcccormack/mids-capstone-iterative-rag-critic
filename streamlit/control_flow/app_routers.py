@@ -1,51 +1,49 @@
 import random
-import secrets
+from typing import Any, Dict, Optional
+
+import pandas as pd
 import streamlit as st
 
-from src.rag.graph import run_pipeline
-
-from streamlit.utils.helpers import generate_random_id
 
 def go_to_main() -> None:
-	"""Return to the main input view."""
-	st.session_state["original_query_id"] = None
-	st.session_state["original_query"] = None
-	st.session_state["gold_answer"] = None
-	st.session_state["pipeline_out"] = None
-	st.session_state["query_selector"] = None
 	st.session_state["page"] = "main"
+	st.session_state.pop("results_bundle", None)
+	st.session_state.pop("selected_row", None)
 
 
-def go_to_rag_results() -> None:
-	state = st.session_state.get("query_selector_key", {})
-	selection = state.get("selection", {})
-	rows = selection.get("rows", [])
+def _pick_selected_query() -> Dict[str, Optional[str]]:
+	df = st.session_state.get("queries_df")
+	selected = st.session_state.get("selected_row")
 
-	# Picked From HotpotQA Dataframe
-	if rows:
-		idx = rows[0]
-		df = st.session_state["queries"]
-		st.session_state["original_query_id"] = str(df.iloc[idx]["id"])
-		st.session_state["original_query"] = str(df.iloc[idx]["query"])
-		st.session_state["gold_answer"] = str(df.iloc[idx]["gold_answer"])
-	
-	# Selected Random Query From HotpotQA Dataframe
-	elif st.session_state["original_query"] is None:
-		idx = random.choice(range(len(st.session_state["queries"])))
-		example = st.session_state["queries"].iloc[[idx]]
-		st.session_state["original_query_id"] = example.get("id").values[0]
-		st.session_state["original_query"] = example.get("query").values[0]
-		st.session_state["gold_answer"] = example.get("gold_answer").values[0]
+	if isinstance(df, pd.DataFrame) and selected is not None:
+		try:
+			row = df.iloc[int(selected)]
+			return {
+				"query": str(row.get("query") or ""),
+				"gold_answer": (None if pd.isna(row.get("gold_answer")) else str(row.get("gold_answer"))),
+			}
+		except Exception:
+			pass
 
-	# Customer Query
-	else:
-		st.session_state["original_query_id"] = secrets.token_hex(12)
-		st.session_state["gold_answer"] = None
+	custom = str(st.session_state.get("original_query") or "").strip()
+	gold = st.session_state.get("gold_answer")
+	return {"query": custom, "gold_answer": gold}
 
-	st.session_state["pipeline_out"] = run_pipeline(
-		original_query_id=st.session_state["original_query_id"],
-		original_query=st.session_state["original_query"],
-		gold_answer=st.session_state["gold_answer"],
-	)
 
-	st.session_state["page"] = "rag_results"
+def go_to_results() -> None:
+	st.session_state["page"] = "results"
+
+	df = st.session_state.get("queries_df")
+	if isinstance(df, pd.DataFrame) and not df.empty:
+		# If no selection and no custom query, pick a random row
+		custom = str(st.session_state.get("original_query") or "").strip()
+		if not custom:
+			idx = random.randint(0, len(df) - 1)
+			st.session_state["selected_row"] = idx
+
+	chosen = _pick_selected_query()
+	st.session_state["original_query"] = chosen.get("query") or ""
+	st.session_state["gold_answer"] = chosen.get("gold_answer")
+
+	# Clear cached results so "Re-run" is deterministic
+	st.session_state.pop("results_bundle", None)

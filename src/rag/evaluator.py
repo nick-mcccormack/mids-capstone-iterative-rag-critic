@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any, Dict, List, Optional, Tuple
 
 import litellm
@@ -14,7 +13,7 @@ from ragas.metrics import (
 	ResponseRelevancy,
 )
 
-from src.utils.helpers import _stringify_contexts
+from src.utils.helpers import _stringify_contexts, run_async
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -65,6 +64,9 @@ def evaluate_answer(
 		(metrics_out, errors)
 	"""
 	langfuse = get_client()
+
+	if not str(getattr(config, "ragas_inference_profile", "") or "").strip():
+		return {}, ["missing_config: ragas_inference_profile"]
 
 	context_strs = _stringify_contexts(contexts)
 	evaluator_llm = llm_factory(
@@ -130,4 +132,4 @@ def evaluate_answer(
 
 		return out, errors
 
-	return asyncio.run(_run())
+	return run_async(_run())

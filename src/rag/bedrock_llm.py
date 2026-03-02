@@ -9,13 +9,35 @@ from langfuse import get_client
 from src.observability.payloads import compact_error, maybe_full_prompts, safe_text_preview
 
 
+def _get_region() -> Optional[str]:
+	"""
+	Get AWS region from env or boto3 session.
+
+	Returns
+	-------
+	str | None
+		AWS region if available.
+	"""
+	env_region = os.getenv("AWS_REGION")
+	if env_region:
+		return str(env_region)
+
+	try:
+		sess = boto3.session.Session()
+		return sess.region_name
+	except Exception:
+		return None
+
+
 @lru_cache(maxsize=1)
 def _get_bedrock_runtime_client() -> Any:
 	"""
 	Create and cache a Bedrock Runtime boto3 client.
 	"""
-	aws_region = os.getenv("AWS_REGION")
-	return boto3.client("bedrock-runtime", region_name=aws_region)
+	region = _get_region()
+	if region:
+		return boto3.client("bedrock-runtime", region_name=str(region))
+	return boto3.client("bedrock-runtime")
 
 
 def _extract_usage(resp: Dict[str, Any]) -> Dict[str, int]:
@@ -81,13 +103,16 @@ def call_llm(
 	"""
 	langfuse = get_client()
 	model_id = os.getenv("INFERENCE_PROFILE") or ""
+	if not model_id.strip():
+		return "", "missing_env: INFERENCE_PROFILE", {"latency_s": 0.0}
+
 	client = _get_bedrock_runtime_client()
 
 	messages = [{"role": "user", "content": [{"text": user_prompt}]}]
 	system = [{"text": system_prompt}]
 
 	request_params = {
-		"modelId": model_id,
+		"modelId": str(model_id),
 		"system": system,
 		"messages": messages,
 		"inferenceConfig": {"temperature": float(config.temperature)},
@@ -141,4 +166,4 @@ def call_llm(
 				"meta": meta,
 			}
 		)
-		return text, None, meta
+		return str(text), None, meta

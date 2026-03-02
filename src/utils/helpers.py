@@ -1,7 +1,12 @@
+import asyncio
 import json
 import re
 import hashlib
-from typing import Any, Dict, List, Optional
+import threading
+from typing import Any, Awaitable, Dict, List, Optional, Tuple, TypeVar
+
+
+T = TypeVar("T")
 
 
 def _stringify_contexts(contexts: List[Any]) -> List[str]:
@@ -82,3 +87,67 @@ def _dedupe_contexts(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 		out.append(c)
 
 	return out
+
+
+def _run_coro_in_thread(coro: Awaitable[T]) -> T:
+	"""
+	Run an async coroutine in a dedicated thread with its own event loop.
+
+	Parameters
+	----------
+	coro : Awaitable[T]
+		Coroutine to execute.
+
+	Returns
+	-------
+	T
+		Result of the coroutine.
+	"""
+	out: Dict[str, Any] = {"result": None, "error": None}
+
+	def _worker() -> None:
+		try:
+			loop = asyncio.new_event_loop()
+			asyncio.set_event_loop(loop)
+			out["result"] = loop.run_until_complete(coro)
+		except Exception as exc:
+			out["error"] = exc
+		finally:
+			try:
+				loop.close()
+			except Exception:
+				pass
+
+	t = threading.Thread(target=_worker, daemon=True)
+	t.start()
+	t.join()
+
+	if out["error"] is not None:
+		raise out["error"]
+	return out["result"]
+
+
+def run_async(coro: Awaitable[T]) -> T:
+	"""
+	Run an async coroutine from sync code safely.
+
+	- If no event loop is running: uses asyncio.run()
+	- If an event loop is running (common in notebooks / some app runtimes):
+	  executes in a dedicated thread.
+
+	Parameters
+	----------
+	coro : Awaitable[T]
+		Coroutine to execute.
+
+	Returns
+	-------
+	T
+		Result of the coroutine.
+	"""
+	try:
+		_ = asyncio.get_running_loop()
+	except RuntimeError:
+		return asyncio.run(coro)
+
+	return _run_coro_in_thread(coro)

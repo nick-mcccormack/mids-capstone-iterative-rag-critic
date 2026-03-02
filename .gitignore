@@ -28,6 +28,7 @@ Thumbs.db
 *.pem
 *.key
 secrets*.json
+iam.json
 
 # Logs
 *.log

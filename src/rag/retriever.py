@@ -1,4 +1,5 @@
 import json
+import os
 from collections import defaultdict
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
@@ -10,18 +11,23 @@ from pyserini.search.lucene import LuceneImpactSearcher, LuceneSearcher
 from src.observability.payloads import summarize_contexts
 
 
+def _require_env(name: str) -> str:
+	val = os.getenv(name)
+	if not val or not str(val).strip():
+		raise RuntimeError(f"missing_env: {name}")
+	return str(val)
+
+
 @lru_cache(maxsize=1)
 def _get_searchers() -> Tuple[Any, Any, Any]:
 	"""
 	Initialize and cache Pyserini searchers.
 	"""
-	import os
-
-	sparse_index = os.getenv("SPARSE_INDEX")
-	sparse_encoder = os.getenv("SPARSE_ENCODER")
-	dense_faiss_index = os.getenv("DENSE_FAISS_INDEX")
-	dense_encoder = os.getenv("DENSE_ENCODER")
-	doc_lucene_index = os.getenv("DOC_LUCENE_INDEX")
+	sparse_index = _require_env("SPARSE_INDEX")
+	sparse_encoder = _require_env("SPARSE_ENCODER")
+	dense_faiss_index = _require_env("DENSE_FAISS_INDEX")
+	dense_encoder = _require_env("DENSE_ENCODER")
+	doc_lucene_index = _require_env("DOC_LUCENE_INDEX")
 
 	sparse = LuceneImpactSearcher.from_prebuilt_index(sparse_index, sparse_encoder)
 	dense = FaissSearcher.from_prebuilt_index(dense_faiss_index, dense_encoder)
@@ -105,7 +111,6 @@ def run_retrieval(
 	tuple[dict[str, list[dict[str, Any]]], str | None]
 		(contexts_by_strategy, error).
 	"""
-	sparse, dense, doc_searcher = _get_searchers()
 	langfuse = get_client()
 
 	top_k = int(config.top_k)
@@ -132,6 +137,8 @@ def run_retrieval(
 		)
 
 		try:
+			sparse, dense, doc_searcher = _get_searchers()
+
 			sparse_hits = list(sparse.search(query, k=k_sparse))
 			dense_hits = list(dense.search(query, k=k_dense))
 

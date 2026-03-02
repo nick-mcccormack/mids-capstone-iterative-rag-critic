@@ -1,23 +1,33 @@
+import os
+from typing import Optional
+
+import pandas as pd
 import streamlit as st
-from src.data.load_data import load_hotpotqa_queries
+
+from src.utils.aws_secrets import bootstrap_env
+
+
+def _load_queries_df() -> pd.DataFrame:
+	path = (os.getenv("BENCHMARK_CSV_PATH") or "").strip()
+	if not path:
+		return pd.DataFrame(columns=["level", "type", "query", "gold_answer"])
+	try:
+		return pd.read_csv(path)
+	except Exception:
+		return pd.DataFrame(columns=["level", "type", "query", "gold_answer"])
 
 
 def state_init() -> None:
-	"""Initialize Streamlit session state for the demo app."""
-	if "page" not in st.session_state:
-		st.session_state["page"] = "query_selection"
+	if st.session_state.get("_initialized"):
+		return
 
-	if "queries" not in st.session_state:
-		st.session_state["queries"] = load_hotpotqa_queries()
+	bootstrap_env()
 
-	if "original_query_id" not in st.session_state:
-		st.session_state["original_query_id"] = None
+	st.session_state["_initialized"] = True
+	st.session_state.setdefault("page", "main")
+	st.session_state.setdefault("original_query", "")
+	st.session_state.setdefault("gold_answer", None)
+	st.session_state.setdefault("selected_row", None)
 
-	if "original_query" not in st.session_state:
-		st.session_state["original_query"] = None
-
-	if "gold_answer" not in st.session_state:
-		st.session_state["gold_answer"] = None
-
-	if "pipeline_out" not in st.session_state:
-		st.session_state["pipeline_out"] = None
+	df = _load_queries_df()
+	st.session_state["queries_df"] = df
