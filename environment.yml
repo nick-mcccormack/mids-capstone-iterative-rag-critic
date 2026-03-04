@@ -1,0 +1,24 @@
+name: rag-capstone
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.11
+  - pip
+  - openjdk=21
+
+  # Numpy >=2 is required by pyserini 1.5.0
+  # Keep it conda-managed to avoid pip resolver churn.
+  - numpy=2.0.2
+
+  # Common runtime deps
+  - pandas=2.2.3
+  - streamlit=1.54.0
+  - pyarrow
+
+  # Torch CPU for sentence-transformers / transformers usage
+  - pytorch
+  - cpuonly
+
+  # Notebook kernel
+  - ipykernel
