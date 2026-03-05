@@ -1,124 +1,226 @@
-"""Dense retriever backed by Qdrant.
-
-This module embeds the query with a sentence-transformers model and performs a
-dense vector search against a Qdrant collection.
-
-Compatible with qdrant-client >= 1.16.0 (uses `query_points`).
-"""
-
-from __future__ import annotations
-
+import json
+import os
+from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Dict, List
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional, Tuple
 
-from qdrant_client import QdrantClient
-from qdrant_client.http.exceptions import UnexpectedResponse
-from sentence_transformers import SentenceTransformer
+from langfuse import get_client
+from pyserini.search.faiss import FaissSearcher
+from pyserini.search.lucene import LuceneImpactSearcher, LuceneSearcher
 
-from src.utils.env import get_env_optional, get_env_required
+from src.observability.payloads import summarize_contexts
 
 
-def _normalize_qdrant_url(url: str) -> str:
-    """Normalize a Qdrant base URL.
-
-    Users sometimes provide dashboard URLs or URLs with extra path segments. The
-    Qdrant client expects a base like ``https://host:6333`` (no extra path).
-
-    Parameters
-    ----------
-    url:
-        Raw URL from environment.
-
-    Returns
-    -------
-    str
-        Normalized base URL.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}"
-    return url.rstrip("/")
+def _require_env(name: str) -> str:
+	val = os.getenv(name)
+	if not val or not str(val).strip():
+		raise RuntimeError(f"missing_env: {name}")
+	return str(val)
 
 
 @lru_cache(maxsize=1)
-def get_embedder() -> SentenceTransformer:
-    """Load and cache the sentence-transformers embedding model."""
-    model_name = get_env_required("EMBED_MODEL")
-    hf_home = get_env_optional("HF_HOME", "") or None
-    device = get_env_optional("EMBED_DEVICE", "cpu")
-    return SentenceTransformer(model_name, device=device, cache_folder=hf_home)
+def _get_searchers() -> Tuple[Any, Any, Any]:
+	"""
+	Initialize and cache Pyserini searchers.
+	"""
+	sparse_index = _require_env("SPARSE_INDEX")
+	sparse_encoder = _require_env("SPARSE_ENCODER")
+	dense_faiss_index = _require_env("DENSE_FAISS_INDEX")
+	dense_encoder = _require_env("DENSE_ENCODER")
+	doc_lucene_index = _require_env("DOC_LUCENE_INDEX")
+
+	sparse = LuceneImpactSearcher.from_prebuilt_index(sparse_index, sparse_encoder)
+	dense = FaissSearcher.from_prebuilt_index(dense_faiss_index, dense_encoder)
+	doc_searcher = LuceneSearcher.from_prebuilt_index(doc_lucene_index)
+
+	return sparse, dense, doc_searcher
 
 
-@lru_cache(maxsize=1)
-def get_qdrant_client() -> QdrantClient:
-    """Create and cache a Qdrant client."""
-    url = _normalize_qdrant_url(get_env_required("QDRANT_URL"))
-    api_key = get_env_optional("QDRANT_API_KEY", "") or None
-    return QdrantClient(url=url, api_key=api_key, timeout=60)
+def _get_doc_record(doc_searcher: Any, docid: str) -> Dict[str, Any]:
+	"""
+	Fetch a document record (title/text/metadata) by docid.
+	"""
+	out: Dict[str, Any] = {"doc_id": docid, "title": None, "text": None, "url": None}
+	try:
+		raw = doc_searcher.doc(docid).raw()
+		doc = json.loads(raw)
+		out["doc_id"] = doc.get("_id", docid)
+		out["title"] = doc.get("title")
+		out["text"] = doc.get("text")
+		out["url"] = doc.get("metadata", {}).get("url")
+	except Exception:
+		pass
+
+	return out
 
 
-def retrieve_contexts(query: str, top_k: int) -> List[Dict[str, Any]]:
-    """Retrieve top-k candidates from Qdrant using dense vector search.
+def _build_contexts(
+	doc_searcher: Any,
+	query: str,
+	hits: List[Any],
+	key: str,
+	resp_attempt: int,
+	query_idx: int,
+) -> List[Dict[str, Any]]:
+	"""
+	Build contexts for a single retrieval list (sparse or dense) in rank order.
+	"""
+	out: List[Dict[str, Any]] = []
+	for rank, hit in enumerate(hits, start=1):
+		docid = getattr(hit, "docid", None)
+		if not docid:
+			continue
 
-    Parameters
-    ----------
-    query:
-        User question or retrieval query.
-    top_k:
-        Number of candidates to retrieve.
+		doc = _get_doc_record(doc_searcher, docid)
+		out.append(
+			{
+				"response_attempt": int(resp_attempt),
+				"query_idx": int(query_idx),
+				"query": query,
+				**doc,
+				f"{key}_rank": int(rank),
+				f"{key}_score": float(getattr(hit, "score", 0.0)),
+				"strategy": f"{key}_retrieval",
+			}
+		)
+	return out
 
-    Returns
-    -------
-    list of dict
-        Retrieval hits, each with ``score``, ``doc_id``, ``title``, and ``text``.
 
-    Raises
-    ------
-    ValueError
-        If ``top_k`` is not a positive integer.
-    RuntimeError
-        If required environment variables are missing or Qdrant is misconfigured.
-    """
-    if not isinstance(top_k, int) or top_k <= 0:
-        raise ValueError("top_k must be a positive integer.")
+def run_retrieval(
+	config: Any,
+	resp_attempt: int,
+	query_idx: int,
+	query: str,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[str]]:
+	"""
+	Retrieve documents for a query using sparse, dense, and hybrid RRF fusion.
 
-    collection = get_env_required("QDRANT_COLLECTION")
-    vector_name = get_env_optional("QDRANT_VECTOR_NAME", "") or None
+	Parameters
+	----------
+	config : Any
+		Pipeline config with retrieval parameters.
+	resp_attempt : int
+		Response attempt number.
+	query_idx : int
+		Query index.
+	query : str
+		Query string to retrieve against.
 
-    embedder = get_embedder()
-    qdrant = get_qdrant_client()
+	Returns
+	-------
+	tuple[dict[str, list[dict[str, Any]]], str | None]
+		(contexts_by_strategy, error).
+	"""
+	langfuse = get_client()
 
-    q_vec = embedder.encode(query, normalize_embeddings=True).tolist()
+	top_k = int(config.top_k)
+	k_sparse = int(config.k_sparse)
+	k_dense = int(config.k_dense)
+	rrf_k = int(config.rrf_k)
 
-    try:
-        resp = qdrant.query_points(
-            collection_name=collection,
-            query=q_vec,
-            limit=top_k,
-            with_payload=True,
-            using=vector_name,
-        )
-    except UnexpectedResponse as exc:
-        # Common misconfig: dashboard URL or reverse-proxy non-API path.
-        if "404" in str(exc) and "page not found" in str(exc).lower():
-            raise RuntimeError(
-                "Qdrant returned 404. Ensure QDRANT_URL is the API base URL, "
-                "e.g. 'http://localhost:6333' or the Qdrant Cloud REST endpoint root "
-                "(not a /dashboard URL)."
-            ) from exc
-        raise
+	err: Optional[str] = None
+	sparse_contexts: List[Dict[str, Any]] = []
+	dense_contexts: List[Dict[str, Any]] = []
+	top_k_fused_contexts: List[Dict[str, Any]] = []
 
-    results: List[Dict[str, Any]] = []
-    for h in resp.points:
-        payload = h.payload or {}
-        results.append(
-            {
-                "score": float(h.score),
-                "doc_id": payload.get("doc_id"),
-                "title": payload.get("title") or "",
-                "text": payload.get("text") or "",
-            }
-        )
+	with langfuse.start_as_current_observation(as_type="span", name="retrieval") as span:
+		span.update(
+			input={
+				"resp_attempt": int(resp_attempt),
+				"query_idx": int(query_idx),
+				"query": query,
+				"top_k": int(top_k),
+				"k_sparse": int(k_sparse),
+				"k_dense": int(k_dense),
+				"rrf_k": int(rrf_k),
+			}
+		)
 
-    return results
+		try:
+			sparse, dense, doc_searcher = _get_searchers()
+
+			sparse_hits = list(sparse.search(query, k=k_sparse))
+			dense_hits = list(dense.search(query, k=k_dense))
+
+			sparse_contexts = _build_contexts(
+				doc_searcher=doc_searcher,
+				query=query,
+				hits=sparse_hits,
+				key="sparse",
+				resp_attempt=resp_attempt,
+				query_idx=query_idx,
+			)
+
+			dense_contexts = _build_contexts(
+				doc_searcher=doc_searcher,
+				query=query,
+				hits=dense_hits,
+				key="dense",
+				resp_attempt=resp_attempt,
+				query_idx=query_idx,
+			)
+
+			fused: Dict[str, float] = defaultdict(float)
+			meta: Dict[str, Dict[str, Any]] = {}
+
+			def _add_rrf(hits: List[Any], key: str) -> None:
+				for rank, hit in enumerate(hits, start=1):
+					docid = getattr(hit, "docid", None)
+					if not docid:
+						continue
+
+					meta.setdefault(docid, {})
+					meta[docid][f"{key}_rank"] = int(rank)
+					meta[docid][f"{key}_score"] = float(getattr(hit, "score", 0.0))
+					fused[docid] += 1.0 / float(rrf_k + rank)
+
+			_add_rrf(sparse_hits, "sparse")
+			_add_rrf(dense_hits, "dense")
+
+			ordered_fused = sorted(
+				fused.items(),
+				key=lambda x: x[1],
+				reverse=True,
+			)[:top_k]
+
+			fused_contexts: List[Dict[str, Any]] = []
+			for fused_rank, (docid, fused_score) in enumerate(ordered_fused, start=1):
+				meta.setdefault(docid, {})
+				meta[docid]["fused_rank"] = int(fused_rank)
+				meta[docid]["fused_score"] = float(fused_score)
+
+				doc = _get_doc_record(doc_searcher, docid)
+				fused_contexts.append(
+					{
+						"response_attempt": int(resp_attempt),
+						"query_idx": int(query_idx),
+						"query": query,
+						**doc,
+						"strategy": "hybrid_rrf",
+						**meta[docid],
+					}
+				)
+
+			top_k_fused_contexts = fused_contexts[:top_k]
+
+		except Exception as exc:
+			err = f"{type(exc).__name__}: {exc}"
+			span.update(level="ERROR", status_message=err)
+
+		span.update(
+			output={
+				"completed": err is None,
+				"counts": {
+					"sparse": int(len(sparse_contexts)),
+					"dense": int(len(dense_contexts)),
+					"fused": int(len(top_k_fused_contexts)),
+				},
+				"fused_summary": summarize_contexts(top_k_fused_contexts),
+			}
+		)
+
+	return {
+		"sparse": sparse_contexts,
+		"dense": dense_contexts,
+		"fused": top_k_fused_contexts,
+	}, err

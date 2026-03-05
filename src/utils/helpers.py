@@ -1,95 +1,153 @@
-from typing import Any, List, Dict, Optional
-
-def _sanitize(obj: Any, max_chars: int, show_prompts: bool) -> Any:
-    if isinstance(obj, dict):
-        out: Dict[str, Any] = {}
-        for k, v in obj.items():
-            if not show_prompts and k in {"system_prompt", "user_prompt"}:
-                out[k] = "(hidden)"
-                continue
-            out[k] = _sanitize(v, max_chars=max_chars, show_prompts=show_prompts)
-        return out
-
-    if isinstance(obj, list):
-        return [_sanitize(x, max_chars=max_chars, show_prompts=show_prompts) for x in obj]
-
-    if isinstance(obj, str):
-        if len(obj) <= max_chars:
-            return obj
-        return obj[: max_chars - 1] + "…"
-
-    return obj
-
-def _extract_events(
-    trace: List[Dict[str, Any]],
-    component: Optional[str] = None,
-    action: Optional[str] = None,
-    stage: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    for e in trace:
-        if component and e.get("component") != component:
-            continue
-        if action and e.get("action") != action:
-            continue
-        if stage and e.get("stage") != stage:
-            continue
-        out.append(e)
-    return out
+import asyncio
+import json
+import re
+import hashlib
+import threading
+from typing import Any, Awaitable, Dict, List, Optional, Tuple, TypeVar
 
 
-def _extract_retrieval_rows(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-
-    for e in _extract_events(trace, component="retriever", action="retrieve_success"):
-        d = e.get("data") or {}
-        rows.append(
-            {
-                "strategy": d.get("strategy"),
-                "query": d.get("query"),
-                "top_k": d.get("top_k"),
-                "num_hits": d.get("num_hits"),
-            }
-        )
-
-    for e in _extract_events(trace, component="retriever", action="retrieve_error"):
-        d = e.get("data") or {}
-        rows.append(
-            {
-                "strategy": d.get("strategy"),
-                "query": d.get("query"),
-                "top_k": d.get("top_k"),
-                "num_hits": 0,
-                "error": d.get("error"),
-            }
-        )
-
-    return rows
+T = TypeVar("T")
 
 
-def _extract_rerank_info(trace: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    evs = _extract_events(trace, component="reranker", action="rerank_success")
-    if not evs:
-        return None
-    return evs[-1].get("data") or None
+def _stringify_contexts(contexts: List[Any]) -> List[str]:
+	"""
+	Convert retrieved contexts into list[str] expected by RAGAS metrics.
+	"""
+	out: List[str] = []
+	for c in contexts:
+		if isinstance(c, str):
+			out.append(c)
+			continue
+
+		if not isinstance(c, dict):
+			out.append(str(c))
+			continue
+
+		title = c.get("title") or ""
+		text = c.get("text") or ""
+		full_text = f"Title: {title}\n\nText: {text}".strip()
+		out.append(full_text)
+
+	return out
 
 
-def _extract_generation_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return _extract_events(trace, component="generator", action="answer_generated")
+def _load_json(text: str) -> Optional[Dict[str, Any]]:
+	"""
+	Parse a JSON object from model output.
+	"""
+	raw = str(text or "")
+	if raw.startswith("```"):
+		raw = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw)
+		raw = re.sub(r"\s*```\s*$", "", raw)
+
+	raw = raw.strip()
+	if not raw:
+		return None
+
+	try:
+		obj = json.loads(raw)
+		return obj if isinstance(obj, dict) else None
+	except json.JSONDecodeError:
+		pass
+
+	start = raw.find("{")
+	end = raw.rfind("}")
+	if start == -1 or end == -1 or end <= start:
+		return None
+
+	try:
+		obj = json.loads(raw[start:end + 1])
+		return obj if isinstance(obj, dict) else None
+	except json.JSONDecodeError:
+		return None
 
 
-def _extract_answer_by_tag(trace: List[Dict[str, Any]], tag: str) -> Optional[str]:
-    for e in _extract_generation_events(trace):
-        d = e.get("data") if isinstance(e.get("data"), dict) else {}
-        if d.get("tag") == tag:
-            return d.get("answer")
-    return None
+def _hash_text(text: str) -> str:
+	"""
+	Compute a SHA-256 hash of a text string.
+	"""
+	return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _extract_judge_metrics(trace: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    evs = _extract_events(trace, component="judge", action="eval_success")
-    if not evs:
-        return None
-    d = evs[-1].get("data") if isinstance(evs[-1].get("data"), dict) else {}
-    metrics = d.get("metrics") if isinstance(d.get("metrics"), dict) else None
-    return metrics
+def _dedupe_contexts(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+	"""
+	Dedupe contexts by (doc_id, title, text hash).
+	"""
+	seen: set[str] = set()
+	out: List[Dict[str, Any]] = []
+
+	for c in contexts:
+		doc_id = str(c.get("doc_id") or "")
+		title = str(c.get("title") or "")
+		text = str(c.get("text") or "")
+		key = f"{doc_id}|{title}|{_hash_text(text)}"
+		if key in seen:
+			continue
+		seen.add(key)
+		out.append(c)
+
+	return out
+
+
+def _run_coro_in_thread(coro: Awaitable[T]) -> T:
+	"""
+	Run an async coroutine in a dedicated thread with its own event loop.
+
+	Parameters
+	----------
+	coro : Awaitable[T]
+		Coroutine to execute.
+
+	Returns
+	-------
+	T
+		Result of the coroutine.
+	"""
+	out: Dict[str, Any] = {"result": None, "error": None}
+
+	def _worker() -> None:
+		try:
+			loop = asyncio.new_event_loop()
+			asyncio.set_event_loop(loop)
+			out["result"] = loop.run_until_complete(coro)
+		except Exception as exc:
+			out["error"] = exc
+		finally:
+			try:
+				loop.close()
+			except Exception:
+				pass
+
+	t = threading.Thread(target=_worker, daemon=True)
+	t.start()
+	t.join()
+
+	if out["error"] is not None:
+		raise out["error"]
+	return out["result"]
+
+
+def run_async(coro: Awaitable[T]) -> T:
+	"""
+	Run an async coroutine from sync code safely.
+
+	- If no event loop is running: uses asyncio.run()
+	- If an event loop is running (common in notebooks / some app runtimes):
+	  executes in a dedicated thread.
+
+	Parameters
+	----------
+	coro : Awaitable[T]
+		Coroutine to execute.
+
+	Returns
+	-------
+	T
+		Result of the coroutine.
+	"""
+	try:
+		_ = asyncio.get_running_loop()
+	except RuntimeError:
+		return asyncio.run(coro)
+
+	return _run_coro_in_thread(coro)
