@@ -1,4 +1,4 @@
-# RAAR (Retrieval-Aware Answer Revision) — AWS + Secrets Manager
+# Iterative RAG with Critic Feedback
 
 This repo runs an iterative RAG pipeline:
 - Hybrid retrieval (sparse + dense) with RRF fusion (Pyserini)
@@ -6,7 +6,7 @@ This repo runs an iterative RAG pipeline:
 - Answer generation on Amazon Bedrock (Converse API)
 - Critic/refiner loop (LLM)
 - Optional RAGAS evaluation (reference metrics enabled only if gold answer is provided)
-- Observability via Langfuse (traces + prompt management)
+- Observability via MLflow (traces + prompt management)
 
 ## Configuration model
 
