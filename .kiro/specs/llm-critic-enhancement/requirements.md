@@ -98,3 +98,28 @@ This document specifies requirements for enhancing an existing RAG pipeline with
 1. THE Critic_System SHALL process all 300 questions from the stratified HotpotQA dataset
 2. THE Critic_System SHALL support evaluation using the HotpotQA official evaluation script
 3. WHEN evaluation completes, THE Critic_System SHALL report accuracy as a percentage for comparison with the 60.17% baseline
+
+### Requirement 8: Logging and Observability
+
+**User Story:** As a RAG system developer, I want visibility into critic decisions and performance metrics, so that I can debug failures and understand where the critic helps or hurts accuracy.
+
+#### Acceptance Criteria
+
+1. WHEN the Answer_Validator evaluates an answer, THE Critic_System SHALL log which validation rule triggered (or that validation passed)
+2. WHEN the Critic_Loop completes for a question, THE Critic_System SHALL log the total number of iterations performed
+3. WHEN the Critic_System processes a question, THE Critic_System SHALL log the number of LLM API calls made and the total token usage
+4. WHEN evaluation completes, THE Critic_System SHALL report a breakdown of how many questions triggered each validation rule (length_exceeded, hedging_detected, multiple_entities, unknown_answer)
+5. WHEN the Critic_System returns a final answer, THE Critic_System SHALL record whether the answer came from the baseline (passed initial validation) or from the Critic_Loop, and which iteration produced it
+
+### Requirement 9: Error Handling and Graceful Degradation
+
+**User Story:** As a RAG system operator, I want the critic enhancement to handle failures gracefully, so that LLM errors, malformed responses, or retrieval failures do not crash the pipeline or produce missing answers.
+
+#### Acceptance Criteria
+
+1. WHEN the Query_Decomposer receives a malformed JSON response from the LLM, THE Critic_System SHALL retry the prompt up to 2 times before falling back to the baseline RAG_Pipeline answer
+2. WHEN the Query_Decomposer returns fewer than 1 or more than 3 Sub_Queries, THE Critic_System SHALL fall back to treating the original query as a single Sub_Query
+3. WHEN the Sub_Query_Retriever encounters a retrieval failure for a Sub_Query, THE Critic_System SHALL continue processing with an empty document list for that Sub_Query
+4. WHEN the Generator produces an empty answer or encounters an LLM error, THE Critic_System SHALL return the most recent non-empty answer (Initial_Answer if on first iteration)
+5. WHEN the Reasoning_Checker receives a malformed JSON response from the LLM, THE Critic_System SHALL retry the prompt up to 2 times before defaulting to the PASS action
+6. WHEN any component raises an unexpected exception, THE Critic_System SHALL log the error and return the Initial_Answer rather than propagating the exception
