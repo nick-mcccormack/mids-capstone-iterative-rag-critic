@@ -1,18 +1,6 @@
-<<<<<<< Updated upstream
-# Iterative RAG with Critic Feedback
-
-This repo runs an iterative RAG pipeline:
-- Hybrid retrieval (sparse + dense) with RRF fusion (Pyserini)
-- Cross-encoder reranking
-- Answer generation on Amazon Bedrock (Converse API)
-- Critic/refiner loop (LLM)
-- Optional RAGAS evaluation (reference metrics enabled only if gold answer is provided)
-- Observability via MLflow (traces + prompt management)
-=======
 # Iterative RAG with Critic
 
 This document explains how the repository's iterative retrieval-augmented generation workflow operates, with an emphasis on the LangGraph graph and the control logic that routes between retrieval, answer generation, criticism, decomposition, step execution, precision rewriting, and final evaluation.
->>>>>>> Stashed changes
 
 ## 1. Purpose
 
@@ -302,12 +290,6 @@ The graph extracts `value` from each binding and stores it in the shared `bindin
 
 ### Why this works
 
-<<<<<<< Updated upstream
-  "LANGFUSE_TRACING_ENABLED": "true",
-  "LANGFUSE_SAMPLE_RATE": "0.1",
-  "TRACE_DEBUG_PAYLOADS": "false"
-}
-=======
 The plan execution stage converts an abstract multi-hop plan into an evidence-collection loop. Each step either resolves missing variables or fails cleanly, and every successful step expands the evidence store.
 
 ## 10. `answer_from_evidence`: regenerate after plan execution
@@ -562,4 +544,3 @@ That is the operational meaning of "Iterative RAG with Critic" in this repo.
 - Bedrock inference profile prerequisites: https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-prereq.html
 - Managed MLflow on SageMaker AI: https://docs.aws.amazon.com/sagemaker/latest/dg/mlflow.html
 - MLflow tracking server integration: https://docs.aws.amazon.com/sagemaker/latest/dg/mlflow-track-experiments.html
->>>>>>> Stashed changes
