@@ -50,6 +50,7 @@ mlruns/
 
 # Hugging Face / Transformers caches (never commit)
 .cache/
+cache/
 hf_cache/
 *.arrow
 *.parquet

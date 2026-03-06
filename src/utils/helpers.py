@@ -1,60 +1,151 @@
-import asyncio
+import hashlib
 import json
 import re
-import hashlib
-import threading
-from typing import Any, Awaitable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Iterable, List, Optional
 
 
-T = TypeVar("T")
+def _format_contexts_ragas(contexts: List[Any]) -> List[str]:
+	"""Convert contexts into the list[str] format expected by RAGAS.
 
+	Parameters
+	----------
+	contexts : list[Any]
+		Input contexts.
 
-def _stringify_contexts(contexts: List[Any]) -> List[str]:
-	"""
-	Convert retrieved contexts into list[str] expected by RAGAS metrics.
+	Returns
+	-------
+	list[str]
+		Formatted contexts.
 	"""
 	out: List[str] = []
-	for c in contexts:
-		if isinstance(c, str):
-			out.append(c)
+	for context in contexts:
+		if isinstance(context, str):
+			out.append(context)
 			continue
-
-		if not isinstance(c, dict):
-			out.append(str(c))
+		if not isinstance(context, dict):
+			out.append(str(context))
 			continue
-
-		title = c.get("title") or ""
-		text = c.get("text") or ""
+		title = str(context.get("title") or "")
+		text = str(context.get("text") or "")
 		full_text = f"Title: {title}\n\nText: {text}".strip()
 		out.append(full_text)
-
 	return out
 
 
-def _load_json(text: str) -> Optional[Dict[str, Any]]:
+def _format_contexts_prompts(contexts: List[Dict[str, Any]]) -> str:
+	"""Format contexts into a stable prompt block.
+
+	Parameters
+	----------
+	contexts : list[dict[str, Any]]
+		Input contexts.
+
+	Returns
+	-------
+	str
+		Prompt-ready context block.
 	"""
-	Parse a JSON object from model output.
+	lines: List[str] = []
+	for context in contexts:
+		doc_id = str(context.get("doc_id") or "")
+		title = str(context.get("title") or "")
+		text = str(context.get("text") or "")
+		lines.append(
+			f"Doc ID: {doc_id}\n"
+			f"Title: {title}\n"
+			f"Text: {text}"
+		)
+	return "\n\n".join(lines)
+
+
+def _dedupe_contexts(contexts: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+	"""Dedupe contexts by doc_id and text hash.
+
+	Parameters
+	----------
+	contexts : Iterable[dict[str, Any]]
+		Input contexts.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Deduplicated contexts.
 	"""
-	raw = str(text or "")
+	seen: set[str] = set()
+	out: List[Dict[str, Any]] = []
+	for context in contexts:
+		doc_id = str(context.get("doc_id") or "")
+		title = str(context.get("title") or "")
+		text = str(context.get("text") or "")
+		key = f"{doc_id}|{title}|{_hash_text(text)}"
+		if key in seen:
+			continue
+		seen.add(key)
+		out.append(context)
+	return out
+
+
+def _get_relevant_contexts(
+	contexts: Iterable[Dict[str, Any]],
+	relevant_context_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+	"""Filter for relevant contexts.
+
+	Parameters
+	----------
+	contexts : Iterable[dict[str, Any]]
+		Input contexts.
+	relevant_context_ids : Optional[list[str]], default None
+		Relevant doc ids from the critic.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Filtered contexts.
+	"""
+	context_list = list(contexts)
+	if not relevant_context_ids:
+		return context_list
+	relevant_ids = {str(doc_id) for doc_id in relevant_context_ids}
+	return [
+		context
+		for context in context_list
+		if str(context.get("doc_id")) in relevant_ids
+	]
+
+
+def _load_json(text: Any) -> Optional[Dict[str, Any]]:
+	"""Parse a JSON object from model output.
+
+	Parameters
+	----------
+	text : Any
+		Model output text or wrapper object.
+
+	Returns
+	-------
+	Optional[dict[str, Any]]
+		Parsed JSON object if available.
+	"""
+	if isinstance(text, dict) and "text" in text:
+		raw = str(text.get("text") or "")
+	else:
+		raw = str(text or "")
 	if raw.startswith("```"):
 		raw = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw)
 		raw = re.sub(r"\s*```\s*$", "", raw)
-
 	raw = raw.strip()
 	if not raw:
 		return None
-
 	try:
 		obj = json.loads(raw)
 		return obj if isinstance(obj, dict) else None
 	except json.JSONDecodeError:
 		pass
-
 	start = raw.find("{")
 	end = raw.rfind("}")
 	if start == -1 or end == -1 or end <= start:
 		return None
-
 	try:
 		obj = json.loads(raw[start:end + 1])
 		return obj if isinstance(obj, dict) else None
@@ -63,91 +154,58 @@ def _load_json(text: str) -> Optional[Dict[str, Any]]:
 
 
 def _hash_text(text: str) -> str:
-	"""
-	Compute a SHA-256 hash of a text string.
+	"""Compute a SHA-256 hash of a text string.
+
+	Parameters
+	----------
+	text : str
+		Input text.
+
+	Returns
+	-------
+	str
+		Hash digest.
 	"""
 	return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _dedupe_contexts(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-	"""
-	Dedupe contexts by (doc_id, title, text hash).
-	"""
-	seen: set[str] = set()
-	out: List[Dict[str, Any]] = []
+def _render_template(template: str, bindings: Dict[str, Any]) -> str:
+	"""Render a query template with known variable bindings.
 
-	for c in contexts:
-		doc_id = str(c.get("doc_id") or "")
-		title = str(c.get("title") or "")
-		text = str(c.get("text") or "")
-		key = f"{doc_id}|{title}|{_hash_text(text)}"
-		if key in seen:
+	Parameters
+	----------
+	template : str
+		Query template.
+	bindings : dict[str, Any]
+		Resolved bindings.
+
+	Returns
+	-------
+	str
+		Rendered query.
+	"""
+	result = str(template)
+	for key, value in bindings.items():
+		if value is None:
 			continue
-		seen.add(key)
-		out.append(c)
-
-	return out
+		result = result.replace("{" + str(key) + "}", str(value))
+	return result
 
 
-def _run_coro_in_thread(coro: Awaitable[T]) -> T:
-	"""
-	Run an async coroutine in a dedicated thread with its own event loop.
+def _missing_placeholders(template: str, bindings: Dict[str, Any]) -> List[str]:
+	"""Return unresolved placeholders for a query template.
 
 	Parameters
 	----------
-	coro : Awaitable[T]
-		Coroutine to execute.
+	template : str
+		Query template.
+	bindings : dict[str, Any]
+		Resolved bindings.
 
 	Returns
 	-------
-	T
-		Result of the coroutine.
+	list[str]
+		Missing placeholder names.
 	"""
-	out: Dict[str, Any] = {"result": None, "error": None}
-
-	def _worker() -> None:
-		try:
-			loop = asyncio.new_event_loop()
-			asyncio.set_event_loop(loop)
-			out["result"] = loop.run_until_complete(coro)
-		except Exception as exc:
-			out["error"] = exc
-		finally:
-			try:
-				loop.close()
-			except Exception:
-				pass
-
-	t = threading.Thread(target=_worker, daemon=True)
-	t.start()
-	t.join()
-
-	if out["error"] is not None:
-		raise out["error"]
-	return out["result"]
-
-
-def run_async(coro: Awaitable[T]) -> T:
-	"""
-	Run an async coroutine from sync code safely.
-
-	- If no event loop is running: uses asyncio.run()
-	- If an event loop is running (common in notebooks / some app runtimes):
-	  executes in a dedicated thread.
-
-	Parameters
-	----------
-	coro : Awaitable[T]
-		Coroutine to execute.
-
-	Returns
-	-------
-	T
-		Result of the coroutine.
-	"""
-	try:
-		_ = asyncio.get_running_loop()
-	except RuntimeError:
-		return asyncio.run(coro)
-
-	return _run_coro_in_thread(coro)
+	placeholders = re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", str(template))
+	return [name for name in placeholders if bindings.get(name) in (None, "")]

@@ -1,155 +1,77 @@
 import json
 import os
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 import boto3
 
 
-def _as_str(v: Any) -> str:
-	"""
-	Normalize secret values to strings (env vars are always strings).
-
-	Parameters
-	----------
-	v : Any
-		Value from the Secrets Manager JSON.
+def _get_region() -> str:
+	"""Return the AWS region for Secrets Manager.
 
 	Returns
 	-------
 	str
-		Stringified value.
+		Resolved AWS region.
 	"""
-	if v is None:
-		return ""
-	if isinstance(v, bool):
-		return "true" if v else "false"
-	return str(v)
+	region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+	return region or "us-east-1"
 
 
-@lru_cache(maxsize=1)
-def _get_secrets_client() -> Any:
-	"""
-	Create and cache an AWS Secrets Manager client.
+def _get_secret_id() -> str:
+	"""Return the secret identifier.
 
 	Returns
 	-------
-	Any
-		Boto3 Secrets Manager client.
+	str
+		Secrets Manager secret id.
 	"""
-	return boto3.client("secretsmanager")
+	return os.getenv("AWS_SECRET_ID") or "mids-capstone-raar/secrets"
 
 
-def _fetch_secret_string(secret_id: str) -> Tuple[Optional[str], Optional[str]]:
-	"""
-	Fetch SecretString from AWS Secrets Manager.
+def _fetch_secret(secret_id: str) -> Dict[str, Any]:
+	"""Fetch and decode a JSON secret.
 
 	Parameters
 	----------
 	secret_id : str
-		Secret id or ARN.
+		Secret identifier.
 
 	Returns
 	-------
-	tuple[str | None, str | None]
-		(secret_string, error).
+	dict[str, Any]
+		Decoded JSON secret payload.
 	"""
+	client = boto3.client("secretsmanager", region_name=_get_region())
+	response = client.get_secret_value(SecretId=secret_id)
+	secret_str = response.get("SecretString")
+	if not secret_str:
+		raise RuntimeError(f"SecretString is empty for secret: {secret_id}")
 	try:
-		client = _get_secrets_client()
-		resp = client.get_secret_value(SecretId=str(secret_id))
+		return json.loads(secret_str)
 	except Exception as exc:
-		return None, f"{type(exc).__name__}: {exc}"
-
-	secret_string = resp.get("SecretString")
-	if not secret_string:
-		return None, "SecretString missing or empty"
-	return str(secret_string), None
+		raise RuntimeError(
+			f"SecretString is not valid JSON for secret: {secret_id}"
+		) from exc
 
 
-def _parse_secret_json(secret_string: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-	"""
-	Parse Secrets Manager JSON payload.
-
-	Parameters
-	----------
-	secret_string : str
-		SecretString value.
+@lru_cache(maxsize=1)
+def bootstrap_env() -> Dict[str, str]:
+	"""Load AWS secrets into process environment variables.
 
 	Returns
 	-------
-	tuple[dict[str, Any] | None, str | None]
-		(secret_dict, error).
+	dict[str, str]
+		Key/value pairs written to ``os.environ``.
 	"""
-	try:
-		obj = json.loads(secret_string)
-	except json.JSONDecodeError as exc:
-		return None, f"JSONDecodeError: {exc}"
-
-	if not isinstance(obj, dict):
-		return None, "SecretString must be a JSON object (key/value pairs)."
-	return obj, None
-
-
-def load_secrets_into_env(
-	secret_id: Optional[str] = None,
-	overwrite: bool = False,
-) -> Optional[str]:
-	"""
-	Load AWS Secrets Manager key/value pairs into os.environ.
-
-	This is intentionally simple:
-	- It loads ONE secret (JSON object) and sets env vars.
-	- It does NOT log secret values.
-	- It keeps your existing os.getenv() usage everywhere else.
-
-	Parameters
-	----------
-	secret_id : str | None
-		Secret id/ARN. If None, uses env var AWS_SECRET_ID, then
-		defaults to "mids-capstone-raar/secrets".
-	overwrite : bool
-		If True, overwrite env vars that are already set.
-
-	Returns
-	-------
-	str | None
-		Error string if something failed, else None.
-	"""
-	sid = secret_id or os.getenv("AWS_SECRET_ID") or "mids-capstone-raar/secrets"
-
-	secret_string, err = _fetch_secret_string(sid)
-	if err is not None:
-		return f"secrets_fetch_error: {err}"
-
-	obj, err = _parse_secret_json(secret_string or "")
-	if err is not None:
-		return f"secrets_parse_error: {err}"
-
-	for k, v in obj.items():
-		key = str(k).strip()
-		if not key:
+	secret_obj = _fetch_secret(_get_secret_id())
+	set_pairs: Dict[str, str] = {}
+	for key, value in secret_obj.items():
+		if value is None:
 			continue
-		if (not overwrite) and (os.getenv(key) is not None):
-			continue
-		os.environ[key] = _as_str(v)
-
-	return None
-
-
-def bootstrap_env() -> Optional[str]:
-	"""
-	Best-effort bootstrap for AWS-first execution.
-
-	Behavior:
-	- If AWS_SECRETS_ENABLED is not "true", do nothing.
-	- Otherwise load secrets from AWS_SECRET_ID (or the default id).
-
-	Returns
-	-------
-	str | None
-		Error string if secrets loading failed, else None.
-	"""
-	enabled = os.getenv("AWS_SECRETS_ENABLED", "true").strip().lower()
-	if enabled != "true":
-		return None
-	return load_secrets_into_env()
+		str_key = str(key)
+		str_val = str(value)
+		if os.getenv(str_key) is None:
+			os.environ[str_key] = str_val
+			set_pairs[str_key] = str_val
+	return set_pairs
