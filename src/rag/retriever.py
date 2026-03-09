@@ -1,226 +1,202 @@
 import json
 import os
-from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-from langfuse import get_client
+from pyserini.encode import SpladeQueryEncoder
 from pyserini.search.faiss import FaissSearcher
 from pyserini.search.lucene import LuceneImpactSearcher, LuceneSearcher
-
-from src.observability.payloads import summarize_contexts
-
-
-def _require_env(name: str) -> str:
-	val = os.getenv(name)
-	if not val or not str(val).strip():
-		raise RuntimeError(f"missing_env: {name}")
-	return str(val)
 
 
 @lru_cache(maxsize=1)
 def _get_searchers() -> Tuple[Any, Any, Any]:
-	"""
-	Initialize and cache Pyserini searchers.
-	"""
-	sparse_index = _require_env("SPARSE_INDEX")
-	sparse_encoder = _require_env("SPARSE_ENCODER")
-	dense_faiss_index = _require_env("DENSE_FAISS_INDEX")
-	dense_encoder = _require_env("DENSE_ENCODER")
-	doc_lucene_index = _require_env("DOC_LUCENE_INDEX")
+	"""Initialize and cache Pyserini searchers.
 
-	sparse = LuceneImpactSearcher.from_prebuilt_index(sparse_index, sparse_encoder)
-	dense = FaissSearcher.from_prebuilt_index(dense_faiss_index, dense_encoder)
+	Returns
+	-------
+	tuple[Any, Any, Any]
+		Sparse searcher, dense searcher, and document searcher.
+	"""
+	sparse_index = os.getenv("SPARSE_INDEX")
+	sparse_encoder = os.getenv("SPARSE_ENCODER")
+	dense_faiss_index = os.getenv("DENSE_FAISS_INDEX")
+	dense_encoder = os.getenv("DENSE_ENCODER")
+	doc_lucene_index = os.getenv("DOC_LUCENE_INDEX")
+	if not doc_lucene_index:
+		raise RuntimeError("DOC_LUCENE_INDEX environment variable is required.")
+
+	sparse = None
+	dense = None
+	if sparse_index and sparse_encoder:
+		sparse_qe = SpladeQueryEncoder(sparse_encoder)
+		sparse = LuceneImpactSearcher.from_prebuilt_index(sparse_index, sparse_qe)
+	if dense_faiss_index and dense_encoder:
+		dense = FaissSearcher.from_prebuilt_index(dense_faiss_index, dense_encoder)
+
 	doc_searcher = LuceneSearcher.from_prebuilt_index(doc_lucene_index)
-
 	return sparse, dense, doc_searcher
-
-
-def _get_doc_record(doc_searcher: Any, docid: str) -> Dict[str, Any]:
-	"""
-	Fetch a document record (title/text/metadata) by docid.
-	"""
-	out: Dict[str, Any] = {"doc_id": docid, "title": None, "text": None, "url": None}
-	try:
-		raw = doc_searcher.doc(docid).raw()
-		doc = json.loads(raw)
-		out["doc_id"] = doc.get("_id", docid)
-		out["title"] = doc.get("title")
-		out["text"] = doc.get("text")
-		out["url"] = doc.get("metadata", {}).get("url")
-	except Exception:
-		pass
-
-	return out
 
 
 def _build_contexts(
 	doc_searcher: Any,
-	query: str,
 	hits: List[Any],
-	key: str,
-	resp_attempt: int,
-	query_idx: int,
+	rank_key: str,
 ) -> List[Dict[str, Any]]:
-	"""
-	Build contexts for a single retrieval list (sparse or dense) in rank order.
+	"""Build normalized contexts from retrieval hits.
+
+	Parameters
+	----------
+	doc_searcher : Any
+		Lucene document searcher.
+	hits : list[Any]
+		Retrieval hits.
+	rank_key : str
+		Key used to store rank.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Normalized contexts.
 	"""
 	out: List[Dict[str, Any]] = []
 	for rank, hit in enumerate(hits, start=1):
-		docid = getattr(hit, "docid", None)
-		if not docid:
+		doc_id = getattr(hit, "docid", None) or hit.get("docid")
+		raw_doc = doc_searcher.doc(doc_id)
+		if raw_doc is None:
 			continue
-
-		doc = _get_doc_record(doc_searcher, docid)
+		doc = json.loads(raw_doc.raw())
 		out.append(
 			{
-				"response_attempt": int(resp_attempt),
-				"query_idx": int(query_idx),
-				"query": query,
-				**doc,
-				f"{key}_rank": int(rank),
-				f"{key}_score": float(getattr(hit, "score", 0.0)),
-				"strategy": f"{key}_retrieval",
+				"doc_id": str(doc_id),
+				"title": doc.get("title"),
+				"text": doc.get("text"),
+				"url": doc.get("metadata", {}).get("url"),
+				rank_key: rank,
 			}
 		)
+	return out
+
+
+def _build_contexts_fused(
+	top_k: int,
+	rrf_k: int,
+	sparse_contexts: List[Dict[str, Any]],
+	dense_contexts: List[Dict[str, Any]],
+	rank_key: str,
+) -> List[Dict[str, Any]]:
+	"""Fuse sparse and dense contexts using reciprocal rank fusion.
+
+	Parameters
+	----------
+	top_k : int
+		Number of contexts to keep.
+	rrf_k : int
+		RRF constant.
+	sparse_contexts : list[dict[str, Any]]
+		Sparse contexts.
+	dense_contexts : list[dict[str, Any]]
+		Dense contexts.
+	rank_key : str
+		Key used to store final rank.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Fused contexts.
+	"""
+	sparse_by_id = {ctx["doc_id"]: ctx for ctx in sparse_contexts}
+	dense_by_id = {ctx["doc_id"]: ctx for ctx in dense_contexts}
+	out: List[Dict[str, Any]] = []
+
+	for doc_id in set(sparse_by_id) | set(dense_by_id):
+		sparse_ctx = sparse_by_id.get(doc_id)
+		dense_ctx = dense_by_id.get(doc_id)
+		base_ctx = sparse_ctx or dense_ctx
+		sparse_rank = sparse_ctx.get("sparse_rank") if sparse_ctx else None
+		dense_rank = dense_ctx.get("dense_rank") if dense_ctx else None
+		score = 0.0
+		for rank in (sparse_rank, dense_rank):
+			if rank is not None:
+				score += 1.0 / float(int(rrf_k) + int(rank))
+		out.append(
+			{
+				"doc_id": doc_id,
+				"title": base_ctx.get("title"),
+				"text": base_ctx.get("text"),
+				"url": base_ctx.get("url"),
+				"sparse_rank": sparse_rank,
+				"dense_rank": dense_rank,
+				"rrf_score": score,
+			}
+		)
+
+	out = sorted(out, key=lambda item: item["rrf_score"], reverse=True)[:top_k]
+	for idx, item in enumerate(out, start=1):
+		item[rank_key] = idx
+		del item["rrf_score"]
 	return out
 
 
 def run_retrieval(
 	config: Any,
-	resp_attempt: int,
 	query_idx: int,
 	query: str,
-) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[str]]:
-	"""
-	Retrieve documents for a query using sparse, dense, and hybrid RRF fusion.
+) -> List[Dict[str, Any]]:
+	"""Run sparse, dense, or fused retrieval.
 
 	Parameters
 	----------
 	config : Any
-		Pipeline config with retrieval parameters.
-	resp_attempt : int
-		Response attempt number.
+		Pipeline config.
 	query_idx : int
-		Query index.
+		Query index, kept for trace parity.
 	query : str
-		Query string to retrieve against.
+		Query string.
 
 	Returns
 	-------
-	tuple[dict[str, list[dict[str, Any]]], str | None]
-		(contexts_by_strategy, error).
+	list[dict[str, Any]]
+		Retrieved contexts.
 	"""
-	langfuse = get_client()
+	_ = query_idx
+	emb_type = config.embedding_type
+	top_k = config.top_k
+	k_sparse = config.k_sparse
+	k_dense = config.k_dense
+	rrf_k = config.rrf_k
+	sparse, dense, doc_searcher = _get_searchers()
 
-	top_k = int(config.top_k)
-	k_sparse = int(config.k_sparse)
-	k_dense = int(config.k_dense)
-	rrf_k = int(config.rrf_k)
+	if emb_type == "sparse":
+		if sparse is None:
+			raise RuntimeError("Sparse retrieval requested but sparse searcher is unset.")
+		hits = list(sparse.search(query, k=k_sparse))
+		return _build_contexts(doc_searcher, hits, rank_key="rank")[:top_k]
 
-	err: Optional[str] = None
-	sparse_contexts: List[Dict[str, Any]] = []
-	dense_contexts: List[Dict[str, Any]] = []
-	top_k_fused_contexts: List[Dict[str, Any]] = []
+	if emb_type == "dense":
+		if dense is None:
+			raise RuntimeError("Dense retrieval requested but dense searcher is unset.")
+		hits = list(dense.search(query, k=k_dense))
+		return _build_contexts(doc_searcher, hits, rank_key="rank")[:top_k]
 
-	with langfuse.start_as_current_observation(as_type="span", name="retrieval") as span:
-		span.update(
-			input={
-				"resp_attempt": int(resp_attempt),
-				"query_idx": int(query_idx),
-				"query": query,
-				"top_k": int(top_k),
-				"k_sparse": int(k_sparse),
-				"k_dense": int(k_dense),
-				"rrf_k": int(rrf_k),
-			}
-		)
+	if sparse is None or dense is None:
+		raise RuntimeError("Fused retrieval requires both sparse and dense searchers.")
 
-		try:
-			sparse, dense, doc_searcher = _get_searchers()
-
-			sparse_hits = list(sparse.search(query, k=k_sparse))
-			dense_hits = list(dense.search(query, k=k_dense))
-
-			sparse_contexts = _build_contexts(
-				doc_searcher=doc_searcher,
-				query=query,
-				hits=sparse_hits,
-				key="sparse",
-				resp_attempt=resp_attempt,
-				query_idx=query_idx,
-			)
-
-			dense_contexts = _build_contexts(
-				doc_searcher=doc_searcher,
-				query=query,
-				hits=dense_hits,
-				key="dense",
-				resp_attempt=resp_attempt,
-				query_idx=query_idx,
-			)
-
-			fused: Dict[str, float] = defaultdict(float)
-			meta: Dict[str, Dict[str, Any]] = {}
-
-			def _add_rrf(hits: List[Any], key: str) -> None:
-				for rank, hit in enumerate(hits, start=1):
-					docid = getattr(hit, "docid", None)
-					if not docid:
-						continue
-
-					meta.setdefault(docid, {})
-					meta[docid][f"{key}_rank"] = int(rank)
-					meta[docid][f"{key}_score"] = float(getattr(hit, "score", 0.0))
-					fused[docid] += 1.0 / float(rrf_k + rank)
-
-			_add_rrf(sparse_hits, "sparse")
-			_add_rrf(dense_hits, "dense")
-
-			ordered_fused = sorted(
-				fused.items(),
-				key=lambda x: x[1],
-				reverse=True,
-			)[:top_k]
-
-			fused_contexts: List[Dict[str, Any]] = []
-			for fused_rank, (docid, fused_score) in enumerate(ordered_fused, start=1):
-				meta.setdefault(docid, {})
-				meta[docid]["fused_rank"] = int(fused_rank)
-				meta[docid]["fused_score"] = float(fused_score)
-
-				doc = _get_doc_record(doc_searcher, docid)
-				fused_contexts.append(
-					{
-						"response_attempt": int(resp_attempt),
-						"query_idx": int(query_idx),
-						"query": query,
-						**doc,
-						"strategy": "hybrid_rrf",
-						**meta[docid],
-					}
-				)
-
-			top_k_fused_contexts = fused_contexts[:top_k]
-
-		except Exception as exc:
-			err = f"{type(exc).__name__}: {exc}"
-			span.update(level="ERROR", status_message=err)
-
-		span.update(
-			output={
-				"completed": err is None,
-				"counts": {
-					"sparse": int(len(sparse_contexts)),
-					"dense": int(len(dense_contexts)),
-					"fused": int(len(top_k_fused_contexts)),
-				},
-				"fused_summary": summarize_contexts(top_k_fused_contexts),
-			}
-		)
-
-	return {
-		"sparse": sparse_contexts,
-		"dense": dense_contexts,
-		"fused": top_k_fused_contexts,
-	}, err
+	sparse_hits = list(sparse.search(query, k=k_sparse))
+	dense_hits = list(dense.search(query, k=k_dense))
+	sparse_contexts = _build_contexts(
+		doc_searcher,
+		sparse_hits,
+		rank_key="sparse_rank",
+	)
+	dense_contexts = _build_contexts(
+		doc_searcher,
+		dense_hits,
+		rank_key="dense_rank",
+	)
+	return _build_contexts_fused(
+		top_k=top_k,
+		rrf_k=rrf_k,
+		sparse_contexts=sparse_contexts,
+		dense_contexts=dense_contexts,
+		rank_key="rank",
+	)

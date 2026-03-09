@@ -1,491 +1,644 @@
-import time
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, TypedDict
 
-from langfuse import get_client
-from langgraph.graph import END, StateGraph
+import mlflow
+from langgraph.graph import END, START, StateGraph
 
-from src.observability.payloads import summarize_contexts
-from src.prompts.prompt_registry import get_prompt
-from src.prompts.user_prompts import get_user_prompt_iter_rag, get_user_prompt_resp
-from src.rag.bedrock_llm import call_llm
-from src.rag.critic import call_critic
+from src.observability.mlflow_client import log_dict_artifact
 from src.rag.evaluator import evaluate_answer
+from src.rag.llm import (
+	call_critic,
+	call_planner,
+	execute_step,
+	generate_answer,
+	rewrite_answer,
+)
 from src.rag.reranker import run_reranking
 from src.rag.retriever import run_retrieval
-from src.utils.helpers import _dedupe_contexts
+from src.utils.helpers import (
+	_dedupe_contexts,
+	_get_relevant_contexts,
+	_missing_placeholders,
+	_render_template,
+)
 
 
-@dataclass(frozen=True)
-class PipelineConfig:
+class GraphState(TypedDict, total=False):
+	"""State carried through the LangGraph pipeline."""
+
+	original_query_id: str
+	original_query: str
+	gold_answer: Optional[str]
+	config: Any
+	current_answer: str
+	final_answer: str
+	input_tokens: int
+	output_tokens: int
+	total_cost: float
+	relevant_contexts: List[Dict[str, Any]]
+	evidence_store_contexts: List[Dict[str, Any]]
+	critic_output: Dict[str, Any]
+	planner_output: Dict[str, Any]
+	round_idx: int
+	bindings: Dict[str, Any]
+	execution_trace: Dict[str, Any]
+	ragas_metrics: Dict[str, Any]
+
+
+def _maybe_rerank(
+	config: Any,
+	query: str,
+	contexts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+	"""Optionally rerank contexts.
+
+	Parameters
+	----------
+	config : Any
+		Pipeline config.
+	query : str
+		Query string.
+	contexts : list[dict[str, Any]]
+		Retrieved contexts.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Selected contexts.
 	"""
-	Configuration for the RAG pipeline.
+	if not contexts:
+		return []
+	selected = contexts
+	if config.use_rerank:
+		selected = run_reranking(config=config, query=query, candidates=contexts)
+	return selected
+
+
+def _update_llm_meta_metrics(
+	state: GraphState,
+	resp: Dict[str, Any],
+) -> GraphState:
+	"""Accumulate LLM usage metrics into graph state.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+	resp : dict[str, Any]
+		LLM response payload.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	top_k: int = 80
-	k_sparse: int = 100
-	k_dense: int = 100
-	rrf_k: int = 50
-
-	top_n: int = 5
-	max_length: int = 512
-	batch_size: int = 32
-
-	temperature: float = 0.0
-	max_tries: int = 4
-
-	eval_temperature: float = 0.0
-	eval_max_tokens: int = 2048
+	state["input_tokens"] += resp.get("meta", {}).get("input_tokens", 0)
+	state["output_tokens"] += resp.get("meta", {}).get("output_tokens", 0)
+	state["total_cost"] += resp.get("meta", {}).get("total_cost", 0.0)
+	return state
 
 
-RagState = Dict[str, Any]
+def _append_trace_list(state: GraphState, key: str, item: Dict[str, Any]) -> None:
+	"""Append an item to a list inside the execution trace.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+	key : str
+		Execution trace key.
+	item : dict[str, Any]
+		Item to append.
+	"""
+	trace = state.setdefault("execution_trace", {})
+	trace.setdefault(key, [])
+	trace[key].append(item)
 
 
-def _init_state(
+def _prepare_initial_state(
 	original_query_id: str,
 	original_query: str,
 	gold_answer: Optional[str],
-	config: PipelineConfig,
-) -> RagState:
+	config: Any,
+) -> GraphState:
+	"""Build the initial graph state.
+
+	Parameters
+	----------
+	original_query_id : str
+		Example identifier.
+	original_query : str
+		Question text.
+	gold_answer : Optional[str]
+		Ground truth answer.
+	config : Any
+		Pipeline config.
+
+	Returns
+	-------
+	GraphState
+		Initialized state.
 	"""
-	Initialize the LangGraph state dict.
-	"""
-	return {
-		"original_query_id": str(original_query_id),
-		"original_query": str(original_query),
-		"gold_answer": gold_answer,
-		"config": config,
-		"attempt_index": 1,
-		"query_idx": 0,
-		"start_answer": "",
-		"current_answer": "",
-		"contexts": [],
-		"attempts": [],
-		"errors": [],
-		"t0": float(time.time()),
-	}
-
-
-def _operational_from_meta(meta: Dict[str, Any]) -> Dict[str, Any]:
-	"""
-	Extract operational fields from call_llm meta.
-	"""
-	usage = meta.get("usage") or {}
-	return {
-		"latency_s": meta.get("latency_s"),
-		"tokens_input": usage.get("input"),
-		"tokens_output": usage.get("output"),
-		"tokens_total": usage.get("total"),
-		"cost_usd": meta.get("cost_usd"),
-	}
-
-
-def _node_initial_retrieve_rerank(state: RagState) -> RagState:
-	"""
-	Retrieve and rerank contexts for the original query (fused -> reranked).
-	"""
-	langfuse = get_client()
-	cfg: PipelineConfig = state["config"]
-
-	with langfuse.start_as_current_observation(
-		as_type="span",
-		name="initial_retrieve_rerank",
-	) as span:
-		all_ctxs, err = run_retrieval(
-			config=cfg,
-			resp_attempt=1,
-			query_idx=int(state["query_idx"]),
-			query=state["original_query"],
-		)
-		if err is not None:
-			state["errors"].append(err)
-
-		fused = all_ctxs.get("fused") or []
-		reranked, err = run_reranking(
-			config=cfg,
-			resp_attempt=1,
-			query_idx=int(state["query_idx"]),
-			query=state["original_query"],
-			candidates=fused,
-		)
-		if err is not None:
-			state["errors"].append(err)
-
-		state["contexts"] = (reranked or [])[: int(cfg.top_n)]
-		span.update(output={"contexts": summarize_contexts(state["contexts"])})
-
-	return state
-
-
-def _node_initial_answer(state: RagState) -> RagState:
-	"""
-	Generate the initial answer from fused_reranked contexts.
-	"""
-	langfuse = get_client()
-	cfg: PipelineConfig = state["config"]
-
-	sys_p = get_prompt("sys_prompt_resp")
-	system_prompt = sys_p.prompt
-	user_prompt = get_user_prompt_resp(state["original_query"], state["contexts"])
-
-	with langfuse.start_as_current_observation(as_type="span", name="initial_answer") as span:
-		text, err, meta = call_llm(
-			config=cfg,
-			tag="answer_initial",
-			system_prompt=system_prompt,
-			user_prompt=user_prompt,
-		)
-		if err is not None:
-			state["errors"].append(err)
-
-		state["start_answer"] = text
-		state["current_answer"] = text
-
-		op = _operational_from_meta(meta)
-		span.update(
-			output={
-				"prompt_version": sys_p.version,
-				"operational": op,
-				"contexts": summarize_contexts(state["contexts"]),
-			}
-		)
-
-	state["attempts"].append(
-		{
-			"attempt_index": 1,
-			"query_idx": int(state["query_idx"]),
-			"answer_text": state["current_answer"],
-			"answer_meta": op,
-			"context_count": int(len(state["contexts"])),
-			"subqueries": [],
-			"critic": None,
-			"ragas": None,
-		}
+	return GraphState(
+		original_query_id=original_query_id,
+		original_query=original_query,
+		gold_answer=gold_answer,
+		config=config,
+		current_answer="",
+		final_answer="",
+		input_tokens=0,
+		output_tokens=0,
+		total_cost=0.0,
+		relevant_contexts=[],
+		evidence_store_contexts=[],
+		critic_output={},
+		planner_output={},
+		round_idx=0,
+		bindings={},
+		execution_trace={
+			"initial_retrieval": {},
+			"initial_answer": {},
+			"critic_rounds": [],
+			"plans": [],
+			"step_executions": [],
+			"final_answer_call": {},
+		},
+		ragas_metrics={},
 	)
+
+
+def _node_initial_retrieve(state: GraphState) -> GraphState:
+	"""Run the first retrieval pass.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
+	"""
+	config = state["config"]
+	query = state["original_query"]
+	contexts = run_retrieval(config=config, query_idx=0, query=query)
+	selected = _maybe_rerank(config=config, query=query, contexts=contexts)
+	unique_contexts = _dedupe_contexts(selected)
+	state["evidence_store_contexts"] = unique_contexts
+	state["relevant_contexts"] = unique_contexts
+	state["execution_trace"]["initial_retrieval"] = {
+		"query": query,
+		"contexts": unique_contexts,
+	}
 	return state
 
 
-def _node_initial_eval(state: RagState) -> RagState:
-	"""
-	Run RAGAS evaluation on the current answer.
-	"""
-	cfg: PipelineConfig = state["config"]
+def _node_initial_answer(state: GraphState) -> GraphState:
+	"""Generate the initial answer attempt.
 
-	metrics, eval_errs = evaluate_answer(
-		config=cfg,
-		resp_attempt=int(state["attempt_index"]),
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
+	"""
+	resp = generate_answer(
+		config=state["config"],
 		query=state["original_query"],
-		model_answer=state["current_answer"],
-		gold_answer=state["gold_answer"],
-		contexts=state["contexts"],
+		contexts=state.get("evidence_store_contexts", []),
 	)
-	state["errors"].extend(eval_errs)
-	state["attempts"][-1]["ragas"] = metrics
+	state = _update_llm_meta_metrics(state, resp)
+	state["current_answer"] = resp["text"]
+	state["execution_trace"]["initial_answer"] = resp["text"]
 	return state
 
 
-def _node_critic(state: RagState) -> RagState:
-	"""
-	Run the critic and store its result on the latest attempt record.
-	"""
-	cfg: PipelineConfig = state["config"]
+def _node_critic(state: GraphState) -> GraphState:
+	"""Evaluate the current answer.
 
-	critic_obj = call_critic(
-		config=cfg,
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
+	"""
+	resp = call_critic(
+		config=state["config"],
 		original_query=state["original_query"],
-		current_answer=state["current_answer"],
-		attempt=int(state["attempt_index"]),
-		contexts=state["contexts"],
+		current_answer=state.get("current_answer", ""),
+		contexts=state.get("relevant_contexts", []),
 	)
-	state["attempts"][-1]["critic"] = critic_obj
-	state["last_critic"] = critic_obj
+	state = _update_llm_meta_metrics(state, resp)
+	state["critic_output"] = resp.get("object", {})
+	state["relevant_contexts"] = _dedupe_contexts(
+		_get_relevant_contexts(
+			state.get("evidence_store_contexts", []),
+			resp.get("object", {}).get("relevant_contexts"),
+		)
+	)
+	_append_trace_list(
+		state,
+		"critic_rounds",
+		{
+			"round_idx": int(state.get("round_idx", 0)),
+			"critic_output": resp.get("object", {}),
+			"current_answer": state.get("current_answer", ""),
+		},
+	)
 	return state
 
 
-def _route_after_critic(state: RagState) -> str:
+def _route_after_critic(state: GraphState) -> str:
+	"""Route based on critic output and iteration budget.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	str
+		Next node key.
 	"""
-	Route based on critic verdict and attempt budget.
+	outcome = state.get("critic_output", {}).get("outcome")
+	config = state["config"]
+	if outcome == "pass":
+		return "finalize"
+	if outcome == "increase_precision":
+		return "precision"
+	if not bool(getattr(config, "iterative", True)):
+		return "finalize"
+	if int(state.get("round_idx", 0)) >= int(getattr(config, "max_rounds", 3)):
+		return "finalize"
+	return "planner"
+
+
+def _node_planner(state: GraphState) -> GraphState:
+	"""Generate a decomposition plan.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	cfg: PipelineConfig = state["config"]
-	critic_obj = state.get("last_critic") or {}
-	verdict = critic_obj.get("verdict")
+	resp = call_planner(
+		config=state["config"],
+		query=state["original_query"],
+		current_answer=state.get("current_answer", ""),
+		contexts=state.get("relevant_contexts", []),
+	)
+	state = _update_llm_meta_metrics(state, resp)
+	state["planner_output"] = resp.get("object", {})
+	_append_trace_list(state, "plans", state["planner_output"])
+	return state
 
-	if verdict == "pass":
-		return "pass"
 
-	if int(state["attempt_index"]) >= int(cfg.max_tries):
-		return "stop"
+def _node_execute_plan(state: GraphState) -> GraphState:
+	"""Execute the planner output step by step.
 
-	return "fail"
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
 
-
-def _node_expand(state: RagState) -> RagState:
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	On critic fail: filter contexts, retrieve subqueries, and answer each subquery.
-	"""
-	langfuse = get_client()
-	cfg: PipelineConfig = state["config"]
-	critic_obj = state.get("last_critic") or {}
+	config = state["config"]
+	plan = state.get("planner_output", {}).get("plan") or []
+	bindings = dict(state.get("bindings") or {})
+	completed_steps: set[str] = set()
+	failed_steps: set[str] = set()
+	total_steps = 0
+	max_steps = int(getattr(config, "max_plan_steps", 6))
 
-	with langfuse.start_as_current_observation(as_type="span", name="expand") as span:
-		relevant_ids = critic_obj.get("relevant_context_ids") or []
-		if relevant_ids:
-			allow = set(str(x) for x in relevant_ids)
-			state["contexts"] = [c for c in state["contexts"] if str(c.get("doc_id")) in allow]
+	while total_steps < max_steps:
+		progress = False
+		for raw_step in plan:
+			step = dict(raw_step)
+			step_id = str(step.get("step_id") or f"s{total_steps + 1}")
+			if step_id in completed_steps or step_id in failed_steps:
+				continue
 
-		query_variants = critic_obj.get("query_variants") or []
-		decomposed = critic_obj.get("decomposed_queries") or []
+			depends_on = [str(item) for item in (step.get("depends_on") or [])]
+			if any(dep not in completed_steps for dep in depends_on):
+				continue
 
-		subqueries: List[Tuple[str, str]] = []
-		for q in query_variants:
-			subqueries.append(("query_variants", str(q)))
-		for q in decomposed:
-			subqueries.append(("decomposed_queries", str(q)))
+			query_template = str(step.get("query_template", ""))
+			missing = _missing_placeholders(query_template, bindings)
+			if missing:
+				failed_steps.add(step_id)
+				_append_trace_list(
+					state,
+					"step_executions",
+					{
+						"step_id": step_id,
+						"status": "skipped_missing_bindings",
+						"query_template": query_template,
+						"missing_bindings": missing,
+					},
+				)
+				continue
 
-		new_contexts: List[Dict[str, Any]] = []
-		subquery_records: List[Dict[str, Any]] = []
-
-		for subquery_type, q in subqueries:
-			state["query_idx"] = int(state["query_idx"]) + 1
-			q_idx = int(state["query_idx"])
-
-			all_ctxs, err = run_retrieval(
-				config=cfg,
-				resp_attempt=int(state["attempt_index"]),
-				query_idx=q_idx,
-				query=q,
+			rendered_query = _render_template(query_template, bindings)
+			step_contexts = run_retrieval(
+				config=config,
+				query_idx=total_steps,
+				query=rendered_query,
 			)
-			if err is not None:
-				state["errors"].append(err)
-
-			fused = all_ctxs.get("fused") or []
-			reranked, err = run_reranking(
-				config=cfg,
-				resp_attempt=int(state["attempt_index"]),
-				query_idx=q_idx,
-				query=q,
-				candidates=fused,
+			step_contexts = _maybe_rerank(
+				config=config,
+				query=rendered_query,
+				contexts=step_contexts,
 			)
-			if err is not None:
-				state["errors"].append(err)
-
-			sub_ctxs = (reranked or [])[: int(cfg.top_n)]
-			new_contexts.extend(sub_ctxs)
-
-			sys_p = get_prompt("sys_prompt_resp")
-			system_prompt = sys_p.prompt
-			user_prompt = get_user_prompt_resp(q, sub_ctxs)
-
-			text, err, meta = call_llm(
-				config=cfg,
-				tag=f"subquery_answer_{q_idx}",
-				system_prompt=system_prompt,
-				user_prompt=user_prompt,
+			state["evidence_store_contexts"] = _dedupe_contexts(
+				state.get("evidence_store_contexts", []) + list(step_contexts)
 			)
-			if err is not None:
-				state["errors"].append(err)
 
-			subquery_records.append(
+			step_resp = execute_step(
+				config=config,
+				step_query=rendered_query,
+				bind_variables=[str(x) for x in (step.get("bind") or [])],
+				step_contexts=step_contexts,
+			)
+			state = _update_llm_meta_metrics(state, step_resp)
+
+			step_result = step_resp.get("object", {})
+			resolved_any = False
+			bindings_out = step_result.get("bindings") or {}
+			for var_name, payload in bindings_out.items():
+				if isinstance(payload, dict):
+					value = payload.get("value")
+				else:
+					value = payload
+				if value not in (None, ""):
+					bindings[str(var_name)] = value
+					resolved_any = True
+
+			status = (
+				"completed"
+				if resolved_any or not step.get("bind")
+				else "failed_bind"
+			)
+			_append_trace_list(
+				state,
+				"step_executions",
 				{
-					"query_idx": q_idx,
-					"subquery_type": subquery_type,
-					"query_text": q,
-					"answer_text": text,
-					"answer_meta": _operational_from_meta(meta),
-					"context_count": int(len(sub_ctxs)),
-				}
+					"step_id": step_id,
+					"status": status,
+					"query_template": query_template,
+					"rendered_query": rendered_query,
+					"step": step,
+					"step_contexts": step_contexts,
+					"step_result": step_result,
+				},
 			)
 
-		state["contexts"] = _dedupe_contexts(state["contexts"] + new_contexts)
-		state["attempts"][-1]["subqueries"] = subquery_records
-		state["attempts"][-1]["context_count"] = int(len(state["contexts"]))
+			if status == "completed":
+				completed_steps.add(step_id)
+			else:
+				failed_steps.add(step_id)
 
-		span.update(
-			output={
-				"num_subqueries": int(len(subquery_records)),
-				"contexts": summarize_contexts(state["contexts"]),
-			}
-		)
+			total_steps += 1
+			progress = True
+			if total_steps >= max_steps:
+				break
 
+		if not progress:
+			break
+
+	state["bindings"] = bindings
+	state["round_idx"] = int(state.get("round_idx", 0)) + 1
 	return state
 
 
-def _node_synthesize(state: RagState) -> RagState:
+def _node_answer_from_evidence(state: GraphState) -> GraphState:
+	"""Answer the original question using the accumulated evidence store.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	Synthesize the next attempt answer using consolidated contexts.
-	"""
-	langfuse = get_client()
-	cfg: PipelineConfig = state["config"]
-	next_attempt = int(state["attempt_index"]) + 1
+	contexts = _dedupe_contexts(state.get("evidence_store_contexts", []))
+	max_contexts_final = int(getattr(state["config"], "max_contexts_final", len(contexts)))
+	contexts = contexts[:max_contexts_final]
+	state["relevant_contexts"] = contexts
 
-	sys_p = get_prompt("sys_prompt_iter_rag")
-	system_prompt = sys_p.prompt
-	user_prompt = get_user_prompt_iter_rag(
-		original_query=state["original_query"],
-		start_answer=state["start_answer"],
-		subquery_records=state["attempts"][-1]["subqueries"],
-		contexts=state["contexts"],
-	)
-
-	with langfuse.start_as_current_observation(as_type="span", name="synthesize") as span:
-		text, err, meta = call_llm(
-			config=cfg,
-			tag=f"iter_rag_answer_attempt_{next_attempt}",
-			system_prompt=system_prompt,
-			user_prompt=user_prompt,
-		)
-		if err is not None:
-			state["errors"].append(err)
-
-		state["attempt_index"] = next_attempt
-		state["current_answer"] = text
-
-		op = _operational_from_meta(meta)
-		span.update(
-			output={
-				"prompt_version": sys_p.version,
-				"operational": op,
-				"contexts": summarize_contexts(state["contexts"]),
-			}
-		)
-
-	state["attempts"].append(
-		{
-			"attempt_index": int(state["attempt_index"]),
-			"query_idx": int(state["query_idx"]),
-			"answer_text": state["current_answer"],
-			"answer_meta": op,
-			"context_count": int(len(state["contexts"])),
-			"subqueries": [],
-			"critic": None,
-			"ragas": None,
-		}
-	)
-	return state
-
-
-def _node_eval_attempt(state: RagState) -> RagState:
-	"""
-	Run RAGAS evaluation on the latest synthesized answer.
-	"""
-	cfg: PipelineConfig = state["config"]
-
-	metrics, eval_errs = evaluate_answer(
-		config=cfg,
-		resp_attempt=int(state["attempt_index"]),
+	resp = generate_answer(
+		config=state["config"],
 		query=state["original_query"],
-		model_answer=state["current_answer"],
-		gold_answer=state["gold_answer"],
-		contexts=state["contexts"],
+		contexts=contexts,
 	)
-	state["errors"].extend(eval_errs)
-	state["attempts"][-1]["ragas"] = metrics
-	return state
-
-
-def _node_finalize(state: RagState) -> RagState:
-	"""
-	Finalize output and attach operational summary as metadata.
-	"""
-	langfuse = get_client()
-	elapsed_s = float(time.time() - float(state["t0"]))
-	err_count = int(len(state["errors"]))
-
-	state["meta"] = {
-		"elapsed_s": elapsed_s,
-		"error_count": err_count,
-		"errors": list(state["errors"]),
-		"max_tries": int(state["config"].max_tries),
+	state = _update_llm_meta_metrics(state, resp)
+	state["current_answer"] = resp["text"]
+	state["execution_trace"]["final_answer_call"] = {
+		"answer": state["current_answer"],
+		"contexts": contexts,
 	}
-
-	with langfuse.start_as_current_observation(as_type="span", name="finalize") as span:
-		span.update(output={"meta": dict(state["meta"])})
-
 	return state
 
 
-def build_graph() -> Any:
+def _node_precision(state: GraphState) -> GraphState:
+	"""Rewrite the current answer for precision.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	Build and compile the LangGraph iterative RAG graph.
+	resp = rewrite_answer(
+		config=state["config"],
+		query=state["original_query"],
+		current_answer=state.get("current_answer", ""),
+		contexts=state.get("relevant_contexts", []),
+	)
+	state = _update_llm_meta_metrics(state, resp)
+	state["current_answer"] = resp.get("text") or state.get("current_answer", "")
+	state["final_answer"] = resp.get("text") or state.get("current_answer", "")
+	state["execution_trace"]["precision_rewrite"] = resp.get("text", "")
+	return state
+
+
+def _node_finalize(state: GraphState) -> GraphState:
+	"""Finalize outputs, run evaluation, and emit MLflow logs.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	GraphState
+		Updated state.
 	"""
-	g = StateGraph(RagState)
+	if not state.get("final_answer"):
+		state["final_answer"] = state.get("current_answer", "I do not know.")
 
-	g.add_node("initial_retrieve_rerank", _node_initial_retrieve_rerank)
-	g.add_node("initial_answer", _node_initial_answer)
-	g.add_node("initial_eval", _node_initial_eval)
-	g.add_node("critic", _node_critic)
+	metrics = evaluate_answer(
+		config=state["config"],
+		query=state["original_query"],
+		model_answer=state["final_answer"],
+		gold_answer=state.get("gold_answer"),
+		contexts=state.get("relevant_contexts", []),
+	)
+	state["ragas_metrics"] = metrics
 
-	g.add_node("expand", _node_expand)
-	g.add_node("synthesize", _node_synthesize)
-	g.add_node("eval_attempt", _node_eval_attempt)
+	if bool(getattr(state["config"], "use_mlflow", True)) and mlflow.active_run():
+		mlflow.log_params(
+			{
+				"original_query_id": state["original_query_id"],
+				"embedding_type": getattr(state["config"], "embedding_type", None),
+				"iterative": getattr(state["config"], "iterative", None),
+				"max_rounds": getattr(state["config"], "max_rounds", None),
+			}
+		)
+		mlflow.log_metrics(metrics)
+		log_dict_artifact(
+			state["execution_trace"],
+			f"execution_traces/{state['original_query_id']}.json",
+		)
+		log_dict_artifact(
+			{
+				"original_query_id": state["original_query_id"],
+				"original_query": state["original_query"],
+				"gold_answer": state.get("gold_answer"),
+				"final_answer": state["final_answer"],
+				"relevant_contexts": state.get("relevant_contexts", []),
+				"evidence_store_contexts": state.get("evidence_store_contexts", []),
+				"ragas_metrics": metrics,
+			},
+			f"results/{state['original_query_id']}.json",
+		)
+	return state
 
-	g.add_node("finalize", _node_finalize)
 
-	g.set_entry_point("initial_retrieve_rerank")
-	g.add_edge("initial_retrieve_rerank", "initial_answer")
-	g.add_edge("initial_answer", "initial_eval")
-	g.add_edge("initial_eval", "critic")
+def _build_graph(iterative: bool) -> Any:
+	"""Construct the LangGraph workflow.
 
-	g.add_conditional_edges(
+	Parameters
+	----------
+	iterative : bool
+		Whether to build the iterative graph.
+
+	Returns
+	-------
+	Any
+		Compiled LangGraph object.
+	"""
+	graph = StateGraph(GraphState)
+
+	graph.add_node("initial_retrieve", _node_initial_retrieve)
+	graph.add_node("initial_answer", _node_initial_answer)
+	graph.add_node("finalize", _node_finalize)
+
+	graph.add_edge(START, "initial_retrieve")
+	graph.add_edge("initial_retrieve", "initial_answer")
+
+	if not iterative:
+		graph.add_edge("initial_answer", "finalize")
+		graph.add_edge("finalize", END)
+		return graph.compile()
+
+	graph.add_node("critic", _node_critic)
+	graph.add_node("planner", _node_planner)
+	graph.add_node("execute_plan", _node_execute_plan)
+	graph.add_node("answer_from_evidence", _node_answer_from_evidence)
+	graph.add_node("precision", _node_precision)
+
+	graph.add_edge("initial_answer", "critic")
+	graph.add_conditional_edges(
 		"critic",
 		_route_after_critic,
 		{
-			"pass": "finalize",
-			"fail": "expand",
-			"stop": "finalize",
+			"planner": "planner",
+			"precision": "precision",
+			"finalize": "finalize",
 		},
 	)
+	graph.add_edge("planner", "execute_plan")
+	graph.add_edge("execute_plan", "answer_from_evidence")
+	graph.add_edge("answer_from_evidence", "critic")
+	graph.add_edge("precision", "finalize")
+	graph.add_edge("finalize", END)
+	return graph.compile()
 
-	g.add_edge("expand", "synthesize")
-	g.add_edge("synthesize", "eval_attempt")
-	g.add_edge("eval_attempt", "critic")
 
-	g.add_edge("finalize", END)
-	return g.compile()
+_COMPILED_GRAPHS: Dict[bool, Any] = {}
 
 
 def run_graph(
 	original_query_id: str,
 	original_query: str,
 	gold_answer: Optional[str],
-	config: PipelineConfig,
+	config: Any,
 ) -> Dict[str, Any]:
-	"""
-	Run the LangGraph iterative RAG graph and return outputs in a stable schema.
+	"""Run the LangGraph-based iterative RAG workflow.
 
 	Parameters
 	----------
 	original_query_id : str
-		Stable id for the query.
+		Example identifier.
 	original_query : str
-		User question.
-	gold_answer : str | None
-		Ground truth answer for reference-based metrics.
-	config : PipelineConfig
-		Pipeline configuration.
+		Question text.
+	gold_answer : Optional[str]
+		Ground truth answer.
+	config : Any
+		Pipeline config.
 
 	Returns
 	-------
 	dict[str, Any]
-		Final results including attempts, meta, and the final answer.
+		Final structured output.
 	"""
-	langfuse = get_client()
-	with langfuse.trace(
-		name="iterative_rag_graph",
-		input={"original_query_id": original_query_id, "query": original_query},
-	) as _trace:
-		graph = build_graph()
-		state = _init_state(original_query_id, original_query, gold_answer, config)
-		final_state = graph.invoke(state)
+	iterative = bool(getattr(config, "iterative", True))
+	if iterative not in _COMPILED_GRAPHS:
+		_COMPILED_GRAPHS[iterative] = _build_graph(iterative=iterative)
 
-	final_answer = ""
-	if final_state.get("attempts"):
-		final_answer = str(final_state["attempts"][-1].get("answer_text") or "")
-
+	initial_state = _prepare_initial_state(
+		original_query_id=original_query_id,
+		original_query=original_query,
+		gold_answer=gold_answer,
+		config=config,
+	)
+	final_state = _COMPILED_GRAPHS[iterative].invoke(initial_state)
 	return {
-		"original_query_id": original_query_id,
-		"original_query": original_query,
-		"gold_answer": gold_answer,
-		"final_answer": final_answer,
-		"attempts": final_state.get("attempts", []),
-		"meta": final_state.get("meta", {}),
+		"original_query_id": final_state["original_query_id"],
+		"original_query": final_state["original_query"],
+		"gold_answer": final_state.get("gold_answer"),
+		"final_answer": final_state.get("final_answer", ""),
+		"relevant_contexts": final_state.get("relevant_contexts", []),
+		"evidence_store_contexts": final_state.get("evidence_store_contexts", []),
+		"execution_trace": final_state.get("execution_trace", {}),
+		"input_tokens": final_state.get("input_tokens", 0),
+		"output_tokens": final_state.get("output_tokens", 0),
+		"total_cost": final_state.get("total_cost", 0.0),
+		"ragas_metrics": final_state.get("ragas_metrics", {}),
 	}

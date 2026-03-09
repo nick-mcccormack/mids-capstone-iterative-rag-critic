@@ -1,0 +1,24 @@
+# Retrieval / indexing
+pyserini==1.5.0
+faiss-cpu==1.13.2
+
+# HF / embeddings / data
+transformers==4.57.6
+sentence-transformers==5.2.3
+datasets==4.0.0
+
+# RAG eval + LLM client
+ragas==0.4.3
+litellm==1.82.0
+
+# MLflow (managed server is 3.0.x => match client 3.0.0)
+mlflow>=3.1
+sagemaker-mlflow==0.2.0
+
+# Graph/orchestration (keep only what you actually import)
+langgraph==1.0.10
+langchain-core==1.2.16
+
+# AWS SDK
+boto3==1.42.60
+botocore==1.42.60
