@@ -154,25 +154,47 @@ def run_experiment(
 			iterable.set_postfix({"last_s": f"{out['timing_s']:.2f}"})
 
 		elapsed = float(time.time() - start)
-		context_precision_vals = [
-			float(r["ragas_metrics"]["context_precision"])
+		
+		initial_context_precision_vals = [
+			float(r["initial_ragas_metrics"]["context_precision"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("context_precision") is not None
+			if r.get("initial_ragas_metrics", {}).get("context_precision") is not None
 		]
-		context_recall_vals = [
-			float(r["ragas_metrics"]["context_recall"])
+		initial_context_recall_vals = [
+			float(r["initial_ragas_metrics"]["context_recall"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("context_recall") is not None
+			if r.get("initial_ragas_metrics", {}).get("context_recall") is not None
 		]
-		faithfulness_vals = [
-			float(r["ragas_metrics"]["faithfulness"])
+		initial_faithfulness_vals = [
+			float(r["initial_ragas_metrics"]["faithfulness"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("faithfulness") is not None
+			if r.get("initial_ragas_metrics", {}).get("faithfulness") is not None
 		]
-		answer_acc_vals = [
-			float(r["ragas_metrics"]["answer_accuracy"])
+		initial_answer_acc_vals = [
+			float(r["initial_ragas_metrics"]["answer_accuracy"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("answer_accuracy") is not None
+			if r.get("initial_ragas_metrics", {}).get("answer_accuracy") is not None
+		]
+
+		final_context_precision_vals = [
+			float(r["final_ragas_metrics"]["context_precision"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("context_precision") is not None
+		]
+		final_context_recall_vals = [
+			float(r["final_ragas_metrics"]["context_recall"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("context_recall") is not None
+		]
+		final_faithfulness_vals = [
+			float(r["final_ragas_metrics"]["faithfulness"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("faithfulness") is not None
+		]
+		final_answer_acc_vals = [
+			float(r["final_ragas_metrics"]["answer_accuracy"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("answer_accuracy") is not None
 		]
 
 		summary = {
@@ -180,17 +202,29 @@ def run_experiment(
 			"run_name": run_name,
 			"elapsed_s": elapsed,
 			"num_queries": len(results),
-			"mean_context_precision": (
-				mean(context_precision_vals) if context_precision_vals else None
+			"mean_initial_context_precision": (
+				mean(initial_context_precision_vals) if initial_context_precision_vals else None
 			),
-			"mean_context_recall": (
-				mean(context_recall_vals) if context_recall_vals else None
+			"mean_initial_context_recall": (
+				mean(initial_context_recall_vals) if initial_context_recall_vals else None
 			),
-			"mean_faithfulness": (
-				mean(faithfulness_vals) if faithfulness_vals else None
+			"mean_initial_faithfulness": (
+				mean(initial_faithfulness_vals) if initial_faithfulness_vals else None
 			),
-			"mean_answer_accuracy": (
-				mean(answer_acc_vals) if answer_acc_vals else None
+			"mean_initial_answer_accuracy": (
+				mean(initial_answer_acc_vals) if initial_answer_acc_vals else None
+			),
+			"mean_final_context_precision": (
+				mean(final_context_precision_vals) if final_context_precision_vals else None
+			),
+			"mean_final_context_recall": (
+				mean(final_context_recall_vals) if final_context_recall_vals else None
+			),
+			"mean_final_faithfulness": (
+				mean(final_faithfulness_vals) if final_faithfulness_vals else None
+			),
+			"mean_final_answer_accuracy": (
+				mean(final_answer_acc_vals) if final_answer_acc_vals else None
 			),
 		}
 
@@ -198,17 +232,29 @@ def run_experiment(
 			batch_metrics = _sanitize_metrics_for_mlflow(
 				{
 					"experiment_elapsed_s": elapsed,
-					"mean_context_precision": summary.get(
-						"mean_context_precision"
+					"mean_initial_context_precision": summary.get(
+						"mean_initial_context_precision"
 					),
-					"mean_context_recall": summary.get(
-						"mean_context_recall"
+					"mean_initial_context_recall": summary.get(
+						"mean_initial_context_recall"
 					),
-					"mean_faithfulness": summary.get(
-						"mean_faithfulness"
+					"mean_initial_faithfulness": summary.get(
+						"mean_initial_faithfulness"
 					),
-					"mean_answer_accuracy": summary.get(
-						"mean_answer_accuracy"
+					"mean_initial_answer_accuracy": summary.get(
+						"mean_initial_answer_accuracy"
+					),
+					"mean_final_context_precision": summary.get(
+						"mean_final_context_precision"
+					),
+					"mean_final_context_recall": summary.get(
+						"mean_final_context_recall"
+					),
+					"mean_final_faithfulness": summary.get(
+						"mean_final_faithfulness"
+					),
+					"mean_final_answer_accuracy": summary.get(
+						"mean_final_answer_accuracy"
 					),
 				}
 			)

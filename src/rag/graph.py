@@ -45,7 +45,8 @@ class GraphState(TypedDict, total=False):
 	bindings: Dict[str, Any]
 	stop_due_to_duplicate_plan: bool
 	execution_trace: Dict[str, Any]
-	ragas_metrics: Dict[str, Any]
+	initial_ragas_metrics: Dict[str, Any]
+	final_ragas_metrics: Dict[str, Any]
 
 
 def _maybe_rerank(
@@ -168,7 +169,8 @@ def _prepare_initial_state(
 			"step_executions": [],
 			"final_answer_call": {},
 		},
-		ragas_metrics={},
+		initial_ragas_metrics={},
+		final_ragas_metrics={},
 	)
 
 
@@ -654,12 +656,14 @@ def _node_finalize(state: GraphState) -> GraphState:
 	GraphState
 		Updated state.
 	"""
+	iterative = bool(getattr(state["config"], "iterative", False))
+
 	if not state.get("final_answer"):
 		state["final_answer"] = state.get("current_answer", "I do not know.")
 	if not state.get("final_contexts"):
 		state["final_contexts"] = list(state.get("relevant_contexts", []))
-	if not state.get("ragas_metrics"):
-		state["ragas_metrics"] = evaluate_answer(
+	if not state.get("final_ragas_metrics"):
+		state["final_ragas_metrics"] = evaluate_answer(
 			config=state["config"],
 			query=state["original_query"],
 			model_answer=state["final_answer"],
@@ -667,8 +671,41 @@ def _node_finalize(state: GraphState) -> GraphState:
 			contexts=state.get("final_contexts", []),
 		)
 
-	metrics = state.get("ragas_metrics", {}) or {}
-	safe_metrics = _sanitize_metrics_for_mlflow(metrics)
+	final_metrics = state.get("final_ragas_metrics", {}) or {}
+	final_safe_metrics = {
+		f"final_{key}": value
+		for key, value in _sanitize_metrics_for_mlflow(
+			final_metrics,
+		).items()
+	}
+
+	if final_safe_metrics:
+		mlflow.log_metrics(final_safe_metrics)
+
+	if iterative and len(state.get("execution_trace", {}).get("critic_rounds", None)) > 1:
+		initial_answer = state.get("execution_trace", {}).get("initial_answer")
+		initial_contexts = state.get("execution_trace", {}).get("initial_retrieval", {}).get("contexts", [])
+		state["initial_ragas_metrics"] = evaluate_answer(
+			config=state["config"],
+			query=state["original_query"],
+			model_answer=initial_answer,
+			gold_answer=state.get("gold_answer"),
+			contexts=initial_contexts,
+		)
+	else:
+		state["initial_ragas_metrics"] = state["final_ragas_metrics"]
+
+	initial_metrics = state.get("initial_ragas_metrics", {}) or {}
+	
+	initial_safe_metrics = {
+		f"initial_{key}": value
+		for key, value in _sanitize_metrics_for_mlflow(
+			initial_metrics,
+		).items()
+	}
+
+	if initial_safe_metrics:
+		mlflow.log_metrics(initial_safe_metrics)
 
 	if bool(getattr(state["config"], "use_mlflow", True)) and mlflow.active_run():
 		mlflow.log_params(
@@ -680,8 +717,7 @@ def _node_finalize(state: GraphState) -> GraphState:
 			}
 		)
 
-		if safe_metrics:
-			mlflow.log_metrics(safe_metrics)
+		
 
 		log_dict_artifact(
 			state["execution_trace"],
@@ -698,7 +734,8 @@ def _node_finalize(state: GraphState) -> GraphState:
 					"evidence_store_contexts",
 					[],
 				),
-				"ragas_metrics": metrics,
+				"initial_ragas_metrics": initial_metrics,
+				"final_ragas_metrics": final_metrics,
 			},
 			f"results/{state['original_query_id']}.json",
 		)
@@ -812,5 +849,6 @@ def run_graph(
 		"input_tokens": final_state.get("input_tokens", 0),
 		"output_tokens": final_state.get("output_tokens", 0),
 		"total_cost": final_state.get("total_cost", 0.0),
-		"ragas_metrics": final_state.get("ragas_metrics", {}),
+		"initial_ragas_metrics": final_state.get("initial_ragas_metrics", {}),
+		"final_ragas_metrics": final_state.get("final_ragas_metrics", {}),
 	}
