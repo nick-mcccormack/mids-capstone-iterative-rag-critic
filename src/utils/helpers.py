@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import pandas as pd
 from typing import Any, Dict, Iterable, List, Optional
 
 
@@ -209,3 +210,85 @@ def _missing_placeholders(template: str, bindings: Dict[str, Any]) -> List[str]:
 	"""
 	placeholders = re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", str(template))
 	return [name for name in placeholders if bindings.get(name) in (None, "")]
+
+
+def format_results_dataframe(
+	examples: List[Dict[str, Any]],
+	results: Dict[str, Any],
+) -> pd.DataFrame:
+	"""Create a formatted results DataFrame by joining examples and results.
+
+	Parameters
+	----------
+	examples : List[Dict[str, Any]]
+		List of example dictionaries. Each example is expected to include
+		at least the keys ``id``, ``question``, ``type``, and ``level``.
+	results : Dict[str, Any]
+		Experiment results dictionary containing a ``results`` key whose
+		value is a list of per-query result dictionaries.
+
+	Returns
+	-------
+	pd.DataFrame
+		DataFrame containing the example metadata joined with flattened
+		experiment results on ``id``.
+	"""
+	examples_df = pd.DataFrame(examples)[["id", "question", "type", "level"]]
+	results_formatted: List[Dict[str, Any]] = []
+
+	for result in results.get("results", []):
+		critic_rounds = result.get("execution_trace", {}).get(
+			"critic_rounds",
+			[],
+		)
+		initial_metrics = result.get("initial_ragas_metrics", {})
+		final_metrics = result.get("final_ragas_metrics", {})
+
+		critic_outcome = None
+		if critic_rounds:
+			critic_output = critic_rounds[0].get("critic_output", {})
+			if isinstance(critic_output, dict):
+				critic_outcome = critic_output.get("outcome")
+
+		results_formatted.append(
+			{
+				"id": result.get("original_query_id"),
+				"critic_outcome": critic_outcome,
+				"initial_answer": result.get(
+					"execution_trace",
+					{},
+				).get("initial_answer"),
+				"final_answer": result.get("final_answer"),
+				"gold_answer": result.get("gold_answer"),
+				"input_tokens": result.get("input_tokens"),
+				"output_tokens": result.get("output_tokens"),
+				"total_cost": result.get("total_cost"),
+				"initial_context_precision": initial_metrics.get(
+					"context_precision",
+				),
+				"final_context_precision": final_metrics.get(
+					"context_precision",
+				),
+				"initial_context_recall": initial_metrics.get(
+					"context_recall",
+				),
+				"final_context_recall": final_metrics.get(
+					"context_recall",
+				),
+				"initial_faithfulness": initial_metrics.get(
+					"faithfulness",
+				),
+				"final_faithfulness": final_metrics.get(
+					"faithfulness",
+				),
+				"initial_answer_accuracy": initial_metrics.get(
+					"answer_accuracy",
+				),
+				"final_answer_accuracy": final_metrics.get(
+					"answer_accuracy",
+				),
+			}
+		)
+
+	results_formatted_df = pd.DataFrame(results_formatted)
+	return examples_df.merge(results_formatted_df, on="id", how="inner")
