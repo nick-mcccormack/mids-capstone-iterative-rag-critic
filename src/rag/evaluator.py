@@ -209,8 +209,11 @@ def evaluate_answer(
 	}
 	metric_classes: List[Any] = []
 
+	metric_classes: List[Any] = []
 	if contexts_present:
-		metric_classes.extend([ContextPrecision, ContextRecall, Faithfulness])
+		metric_classes.extend(
+			[ContextPrecision, ContextRecall, Faithfulness]
+		)
 		base_kwargs.update(
 			{
 				"contexts": context_strs,

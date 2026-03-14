@@ -1,4 +1,6 @@
+import json
 from typing import Any, Dict, List, Optional, TypedDict
+from numbers import Real
 
 import mlflow
 from langgraph.graph import END, START, StateGraph
@@ -35,11 +37,13 @@ class GraphState(TypedDict, total=False):
 	output_tokens: int
 	total_cost: float
 	relevant_contexts: List[Dict[str, Any]]
+	final_contexts: List[Dict[str, Any]]
 	evidence_store_contexts: List[Dict[str, Any]]
 	critic_output: Dict[str, Any]
 	planner_output: Dict[str, Any]
 	round_idx: int
 	bindings: Dict[str, Any]
+	stop_due_to_duplicate_plan: bool
 	execution_trace: Dict[str, Any]
 	ragas_metrics: Dict[str, Any]
 
@@ -149,11 +153,13 @@ def _prepare_initial_state(
 		output_tokens=0,
 		total_cost=0.0,
 		relevant_contexts=[],
+		final_contexts=[],
 		evidence_store_contexts=[],
 		critic_output={},
 		planner_output={},
 		round_idx=0,
 		bindings={},
+		stop_due_to_duplicate_plan=False,
 		execution_trace={
 			"initial_retrieval": {},
 			"initial_answer": {},
@@ -164,6 +170,92 @@ def _prepare_initial_state(
 		},
 		ragas_metrics={},
 	)
+
+
+def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
+	"""
+	Keep only MLflow-safe numeric metrics.
+
+	Parameters
+	----------
+	metrics : Dict[str, Any]
+		Raw metrics dictionary.
+
+	Returns
+	-------
+	Dict[str, float]
+		Filtered metrics with only finite real values.
+	"""
+	clean: Dict[str, float] = {}
+
+	for key, value in metrics.items():
+		if value is None:
+			continue
+		if isinstance(value, bool):
+			continue
+		if not isinstance(value, Real):
+			continue
+
+		val = float(value)
+		if val != val:  # NaN check
+			continue
+		if val in (float("inf"), float("-inf")):
+			continue
+
+		clean[key] = val
+
+	return clean
+
+
+
+
+def _get_failed_step_history(state: GraphState) -> List[Dict[str, Any]]:
+	"""Collect failed step history for replanning.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	list[dict[str, Any]]
+		Recent failed step records.
+	"""
+	items = state.get("execution_trace", {}).get("step_executions", []) or []
+	failed: List[Dict[str, Any]] = []
+	for item in items:
+		status = str(item.get("status") or "")
+		if status not in {"failed_bind", "skipped_missing_bindings"}:
+			continue
+		failed.append(
+			{
+				"step_id": item.get("step_id"),
+				"status": status,
+				"query_template": item.get("query_template"),
+				"rendered_query": item.get("rendered_query"),
+				"missing_bindings": item.get("missing_bindings", []),
+				"answer": (item.get("step_result") or {}).get("answer"),
+			}
+		)
+	return failed[-10:]
+
+
+def _canonicalize_plan(plan_obj: Dict[str, Any]) -> str:
+	"""Convert a planner object into a stable comparable string.
+
+	Parameters
+	----------
+	plan_obj : dict[str, Any]
+		Planner output object.
+
+	Returns
+	-------
+	str
+		Canonicalized string representation.
+	"""
+	plan = plan_obj.get("plan") or []
+	return json.dumps(plan, ensure_ascii=False, sort_keys=True)
 
 
 def _node_initial_retrieve(state: GraphState) -> GraphState:
@@ -186,6 +278,7 @@ def _node_initial_retrieve(state: GraphState) -> GraphState:
 	unique_contexts = _dedupe_contexts(selected)
 	state["evidence_store_contexts"] = unique_contexts
 	state["relevant_contexts"] = unique_contexts
+	state["final_contexts"] = unique_contexts
 	state["execution_trace"]["initial_retrieval"] = {
 		"query": query,
 		"contexts": unique_contexts,
@@ -295,16 +388,71 @@ def _node_planner(state: GraphState) -> GraphState:
 	GraphState
 		Updated state.
 	"""
+	failed_step_history = _get_failed_step_history(state)
 	resp = call_planner(
 		config=state["config"],
 		query=state["original_query"],
 		current_answer=state.get("current_answer", ""),
 		contexts=state.get("relevant_contexts", []),
+		failed_step_history=failed_step_history,
 	)
 	state = _update_llm_meta_metrics(state, resp)
-	state["planner_output"] = resp.get("object", {})
-	_append_trace_list(state, "plans", state["planner_output"])
+	planner_output = resp.get("object", {})
+	planner_signature = _canonicalize_plan(planner_output)
+	failed_signatures = {
+		str(item.get("planner_signature"))
+		for item in state.get("execution_trace", {}).get("plans", [])
+		if bool(item.get("had_failed_bind"))
+	}
+	if planner_signature and planner_signature in failed_signatures:
+		state["stop_due_to_duplicate_plan"] = True
+		planner_output = {"outcome": "decompose", "plan": []}
+		_append_trace_list(
+			state,
+			"plans",
+			{
+				"outcome": "decompose",
+				"plan": [],
+				"planner_signature": planner_signature,
+				"duplicate_failed_plan_blocked": True,
+				"had_failed_bind": True,
+			},
+		)
+		state["planner_output"] = planner_output
+		return state
+
+	state["stop_due_to_duplicate_plan"] = False
+	state["planner_output"] = planner_output
+	_append_trace_list(
+		state,
+		"plans",
+		{
+			**planner_output,
+			"planner_signature": planner_signature,
+			"had_failed_bind": False,
+		},
+	)
 	return state
+
+
+
+
+def _route_after_planner(state: GraphState) -> str:
+	"""Route after the planner stage.
+
+	Parameters
+	----------
+	state : GraphState
+		Current graph state.
+
+	Returns
+	-------
+	str
+		Next node key.
+	"""
+	if bool(state.get("stop_due_to_duplicate_plan", False)):
+		return "finalize"
+	return "execute_plan"
 
 
 def _node_execute_plan(state: GraphState) -> GraphState:
@@ -414,6 +562,9 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				completed_steps.add(step_id)
 			else:
 				failed_steps.add(step_id)
+				plans = state.get("execution_trace", {}).get("plans", [])
+				if plans:
+					plans[-1]["had_failed_bind"] = True
 
 			total_steps += 1
 			progress = True
@@ -442,9 +593,12 @@ def _node_answer_from_evidence(state: GraphState) -> GraphState:
 		Updated state.
 	"""
 	contexts = _dedupe_contexts(state.get("evidence_store_contexts", []))
-	max_contexts_final = int(getattr(state["config"], "max_contexts_final", len(contexts)))
-	contexts = contexts[:max_contexts_final]
+	max_contexts_final = getattr(state["config"], "max_contexts_final", None)
+	if max_contexts_final is not None:
+		max_contexts_final = int(max_contexts_final)
+		contexts = contexts[:max_contexts_final]
 	state["relevant_contexts"] = contexts
+	state["final_contexts"] = contexts
 
 	resp = generate_answer(
 		config=state["config"],
@@ -501,26 +655,33 @@ def _node_finalize(state: GraphState) -> GraphState:
 	"""
 	if not state.get("final_answer"):
 		state["final_answer"] = state.get("current_answer", "I do not know.")
+	if not state.get("final_contexts"):
+		state["final_contexts"] = list(state.get("relevant_contexts", []))
+	if not state.get("ragas_metrics"):
+		state["ragas_metrics"] = evaluate_answer(
+			config=state["config"],
+			query=state["original_query"],
+			model_answer=state["final_answer"],
+			gold_answer=state.get("gold_answer"),
+			contexts=state.get("final_contexts", []),
+		)
 
-	metrics = evaluate_answer(
-		config=state["config"],
-		query=state["original_query"],
-		model_answer=state["final_answer"],
-		gold_answer=state.get("gold_answer"),
-		contexts=state.get("relevant_contexts", []),
-	)
-	state["ragas_metrics"] = metrics
+	metrics = state.get("ragas_metrics", {}) or {}
+	safe_metrics = _sanitize_metrics_for_mlflow(metrics)
 
 	if bool(getattr(state["config"], "use_mlflow", True)) and mlflow.active_run():
 		mlflow.log_params(
 			{
 				"original_query_id": state["original_query_id"],
-				"embedding_type": getattr(state["config"], "embedding_type", None),
-				"iterative": getattr(state["config"], "iterative", None),
-				"max_rounds": getattr(state["config"], "max_rounds", None),
+				"original_query": state["original_query"],
+				"num_final_contexts": len(state.get("final_contexts", [])),
+				"num_evidence_contexts": len(state.get("evidence_store_contexts", [])),
 			}
 		)
-		mlflow.log_metrics(metrics)
+
+		if safe_metrics:
+			mlflow.log_metrics(safe_metrics)
+
 		log_dict_artifact(
 			state["execution_trace"],
 			f"execution_traces/{state['original_query_id']}.json",
@@ -530,9 +691,12 @@ def _node_finalize(state: GraphState) -> GraphState:
 				"original_query_id": state["original_query_id"],
 				"original_query": state["original_query"],
 				"gold_answer": state.get("gold_answer"),
-				"final_answer": state["final_answer"],
-				"relevant_contexts": state.get("relevant_contexts", []),
-				"evidence_store_contexts": state.get("evidence_store_contexts", []),
+				"final_answer": state.get("final_answer"),
+				"final_contexts": state.get("final_contexts", []),
+				"evidence_store_contexts": state.get(
+					"evidence_store_contexts",
+					[],
+				),
 				"ragas_metrics": metrics,
 			},
 			f"results/{state['original_query_id']}.json",
@@ -583,7 +747,14 @@ def _build_graph(iterative: bool) -> Any:
 			"finalize": "finalize",
 		},
 	)
-	graph.add_edge("planner", "execute_plan")
+	graph.add_conditional_edges(
+		"planner",
+		_route_after_planner,
+		{
+			"execute_plan": "execute_plan",
+			"finalize": "finalize",
+		},
+	)
 	graph.add_edge("execute_plan", "answer_from_evidence")
 	graph.add_edge("answer_from_evidence", "critic")
 	graph.add_edge("precision", "finalize")

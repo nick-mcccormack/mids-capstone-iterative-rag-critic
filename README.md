@@ -236,6 +236,14 @@ The planner prompt is designed to create an ordered JSON plan with entries like:
 - `bind`
 - `depends_on`
 
+The planner now also receives failed step history from earlier rounds. That gives it explicit visibility into:
+
+- steps that failed to bind a variable
+- steps skipped due to missing bindings
+- prior direct-lookups that did not retrieve the needed evidence
+
+The planner is instructed not to repeat a previously failed plan. If a direct lookup has already failed, it should back off to a bridge-style decomposition that resolves missing intermediate entities or facts first.
+
 ### Why templates and bindings exist
 
 Many multi-hop questions cannot be solved in one direct retrieval call because a later query depends on information not yet known.
@@ -473,7 +481,7 @@ The main `PipelineConfig` fields that shape the graph are:
 
 ## 16. Execution trace structure
 
-The graph stores a structured execution trace in the state and logs it as an artifact.
+The graph stores a structured execution trace in the state and logs it as an artifact. Duplicate failed plans are also tracked so the graph can block repeated planner outputs after a failed bind instead of looping over the same ineffective direct lookup.
 
 Typical keys are:
 

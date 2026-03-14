@@ -2,6 +2,7 @@ import time
 import uuid
 from statistics import mean
 from typing import Any, Dict, List, Optional
+from numbers import Real
 
 import mlflow
 from tqdm import tqdm
@@ -10,6 +11,41 @@ from src.observability.mlflow_client import log_dict_artifact, start_run_if_enab
 from src.rag.graph import run_graph
 from src.utils.aws_secrets import bootstrap_env
 from src.utils.config import PipelineConfig
+
+
+def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
+	"""
+	Filter metrics to MLflow-safe finite numeric values.
+
+	Parameters
+	----------
+	metrics : Dict[str, Any]
+		Raw metrics dictionary.
+
+	Returns
+	-------
+	Dict[str, float]
+		Filtered dictionary containing only finite numeric values.
+	"""
+	clean: Dict[str, float] = {}
+
+	for key, value in metrics.items():
+		if value is None:
+			continue
+		if isinstance(value, bool):
+			continue
+		if not isinstance(value, Real):
+			continue
+
+		val = float(value)
+		if val != val:
+			continue
+		if val in (float("inf"), float("-inf")):
+			continue
+
+		clean[key] = val
+
+	return clean
 
 
 def run_pipeline(
@@ -103,7 +139,7 @@ def run_experiment(
 				out = run_graph(
 					original_query_id=item.get("id"),
 					original_query=item.get("question"),
-					gold_answer=item.get("gold_answer"),
+					gold_answer=item.get("answer"),
 					config=cfg,
 				)
 
@@ -159,15 +195,27 @@ def run_experiment(
 		}
 
 		if bool(cfg.use_mlflow) and mlflow.active_run():
-			mlflow.log_metrics(
+			batch_metrics = _sanitize_metrics_for_mlflow(
 				{
 					"experiment_elapsed_s": elapsed,
-					"mean_context_precision": summary["mean_context_precision"],
-					"mean_context_recall": summary["mean_context_recall"],
-					"mean_faithfulness": summary["mean_faithfulness"],
-					"mean_answer_accuracy": summary["mean_answer_accuracy"],
+					"mean_context_precision": summary.get(
+						"mean_context_precision"
+					),
+					"mean_context_recall": summary.get(
+						"mean_context_recall"
+					),
+					"mean_faithfulness": summary.get(
+						"mean_faithfulness"
+					),
+					"mean_answer_accuracy": summary.get(
+						"mean_answer_accuracy"
+					),
 				}
 			)
+
+			if batch_metrics:
+				mlflow.log_metrics(batch_metrics)
+
 			log_dict_artifact(summary, f"batch_summaries/{batch_id}.json")
 
 		return {
