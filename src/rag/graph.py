@@ -475,6 +475,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 	failed_steps: set[str] = set()
 	total_steps = 0
 	max_steps = int(getattr(config, "max_plan_steps", 6))
+	step_top_k = int(getattr(config, "step_top_k", 5))
 
 	while total_steps < max_steps:
 		progress = False
@@ -514,7 +515,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				config=config,
 				query=rendered_query,
 				contexts=step_contexts,
-			)
+			)[:step_top_k]
 			state["evidence_store_contexts"] = _dedupe_contexts(
 				state.get("evidence_store_contexts", []) + list(step_contexts)
 			)
