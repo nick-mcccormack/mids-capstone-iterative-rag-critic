@@ -1,4 +1,6 @@
 import os
+import json
+import re
 import time
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
@@ -17,7 +19,7 @@ from src.prompts.user_prompts import (
 	get_user_prompt_planner,
 	get_user_prompt_step_executor,
 )
-from src.utils.helpers import _load_json
+from src.utils.helpers import _parse_json_dict
 
 
 @lru_cache(maxsize=1)
@@ -163,6 +165,120 @@ def generate_answer(
 	}
 
 
+def _build_empty_critic_object() -> Dict[str, Any]:
+	"""Build an empty critic result.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Canonical empty critic object.
+	"""
+	return {
+		"outcome": "decompose",
+		"relevant_contexts": [],
+	}
+
+
+def _normalize_critic_object(
+	obj: Any,
+	contexts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+	"""Normalize parsed critic output into the required schema.
+
+	Parameters
+	----------
+	obj : Any
+		Parsed JSON-like object.
+	contexts : List[Dict[str, Any]]
+		Contexts used to validate doc_ids.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Canonical critic object.
+	"""
+	fallback = _build_empty_critic_object()
+
+	if not isinstance(obj, dict):
+		return fallback
+
+	outcome = obj.get("outcome")
+	if outcome not in {"pass", "decompose"}:
+		outcome = "decompose"
+
+	relevant_contexts = obj.get("relevant_contexts", [])
+	if isinstance(relevant_contexts, str):
+		relevant_contexts = [relevant_contexts]
+	if not isinstance(relevant_contexts, list):
+		relevant_contexts = []
+
+	valid_doc_ids = {
+		str(context.get("doc_id")).strip()
+		for context in contexts
+		if str(context.get("doc_id", "")).strip()
+	}
+	relevant_contexts = [
+		doc_id.strip()
+		for doc_id in relevant_contexts
+		if isinstance(doc_id, str) and doc_id.strip() in valid_doc_ids
+	]
+	relevant_contexts = list(dict.fromkeys(relevant_contexts))
+
+	if outcome == "pass":
+		relevant_contexts = []
+
+	return {
+		"outcome": outcome,
+		"relevant_contexts": relevant_contexts,
+	}
+
+
+def _load_critic_json(
+	text: Any,
+	contexts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+	"""Parse and normalize critic JSON from model output.
+
+	Parameters
+	----------
+	text : Any
+		Model output text or wrapper object.
+	contexts : List[Dict[str, Any]]
+		Contexts used to validate doc_ids.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Normalized critic object.
+	"""
+	obj = _parse_json_dict(text)
+	if obj is None:
+		return _build_empty_critic_object()
+	return _normalize_critic_object(obj=obj, contexts=contexts)
+
+
+def _load_planner_json(text: Any) -> Dict[str, Any]:
+	"""Parse and normalize planner JSON from model output.
+
+	Parameters
+	----------
+	text : Any
+		Model output text or wrapper object.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Normalized planner object.
+	"""
+	obj = _parse_json_dict(text)
+	if obj is None:
+		return {
+			"outcome": "decompose",
+			"plan": [],
+		}
+	return _normalize_planner_object(obj)
+
+
 def call_critic(
 	config: Any,
 	original_query: str,
@@ -187,21 +303,117 @@ def call_critic(
 	dict[str, Any]
 		Model text, metadata, and parsed object.
 	"""
+	context_list = contexts or []
 	system_prompt = get_sys_prompt_critic()
 	user_prompt = get_user_prompt_base_with_ans(
 		original_query,
 		current_answer,
-		contexts or [],
+		context_list,
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
-	obj = _load_json(response["text"]) or {
-		"outcome": "decompose",
-		"relevant_contexts": [],
-	}
+	obj = _load_critic_json(
+		text=response.get("text"),
+		contexts=context_list,
+	)
 	return {
 		"text": response.get("text"),
 		"meta": response.get("meta"),
 		"object": obj,
+	}
+
+
+def _normalize_planner_object(obj: Any) -> Dict[str, Any]:
+	"""Normalize parsed planner output into the required schema.
+
+	Parameters
+	----------
+	obj : Any
+		Parsed JSON-like object.
+
+	Returns
+	-------
+	dict[str, Any]
+		Canonical planner object.
+	"""
+	fallback: Dict[str, Any] = {
+		"outcome": "decompose",
+		"plan": [],
+	}
+	if not isinstance(obj, dict):
+		return fallback
+
+	plan = obj.get("plan", [])
+	if not isinstance(plan, list):
+		plan = []
+
+	normalized_plan: List[Dict[str, Any]] = []
+	seen_step_ids = set()
+
+	for idx, step in enumerate(plan, start=1):
+		if not isinstance(step, dict):
+			continue
+
+		step_id = step.get("step_id")
+		if not isinstance(step_id, str) or not re.fullmatch(r"s\d+", step_id):
+			step_id = f"s{idx}"
+
+		if step_id in seen_step_ids:
+			step_id = f"s{idx}"
+		seen_step_ids.add(step_id)
+
+		query_template = step.get("query_template")
+		if not isinstance(query_template, str):
+			query_template = ""
+		query_template = query_template.strip()
+		if not query_template:
+			continue
+
+		bind = step.get("bind", [])
+		if isinstance(bind, str):
+			bind = [bind]
+		if not isinstance(bind, list):
+			bind = []
+		bind = [
+			item.strip() for item in bind
+			if isinstance(item, str) and item.strip()
+		]
+		bind = list(dict.fromkeys(bind))
+
+		depends_on = step.get("depends_on", [])
+		if isinstance(depends_on, str):
+			depends_on = [depends_on]
+		if not isinstance(depends_on, list):
+			depends_on = []
+
+		valid_prior_ids = {f"s{i}" for i in range(1, idx)}
+		depends_on = [
+			item for item in depends_on
+			if isinstance(item, str) and item in valid_prior_ids
+		]
+		depends_on = list(dict.fromkeys(depends_on))
+
+		normalized_plan.append(
+			{
+				"step_id": f"s{len(normalized_plan) + 1}",
+				"query_template": query_template,
+				"bind": bind,
+				"depends_on": depends_on,
+			}
+		)
+
+	id_map = {
+		old_step["step_id"]: f"s{idx}"
+		for idx, old_step in enumerate(normalized_plan, start=1)
+	}
+	for idx, step in enumerate(normalized_plan, start=1):
+		step["step_id"] = f"s{idx}"
+		step["depends_on"] = [
+			id_map[dep] for dep in step["depends_on"] if dep in id_map
+		]
+
+	return {
+		"outcome": "decompose",
+		"plan": normalized_plan,
 	}
 
 
@@ -232,13 +444,149 @@ def call_planner(
 		failed_step_history=failed_step_history or [],
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
-	obj = _load_json(response["text"]) or {"outcome": "decompose", "plan": []}
+	obj = _load_planner_json(response.get("text"))
 	return {
 		"text": response.get("text"),
 		"meta": response.get("meta"),
 		"object": obj,
 	}
 
+def _build_empty_executor_object(
+	bind_variables: List[str],
+) -> Dict[str, Any]:
+	"""Build an empty executor result for the requested variables.
+
+	Parameters
+	----------
+	bind_variables : List[str]
+		Variables expected in the executor output.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Canonical empty executor object.
+	"""
+	return {
+		"answer": "I do not know.",
+		"bindings": {
+			var_name: {
+				"value": None,
+				"citations": [],
+			}
+			for var_name in bind_variables
+		},
+	}
+
+
+def _normalize_step_executor_object(
+	obj: Any,
+	bind_variables: List[str],
+	contexts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+	"""Normalize parsed executor output into the required schema.
+
+	Parameters
+	----------
+	obj : Any
+		Parsed JSON-like object.
+	bind_variables : List[str]
+		Variables required in the final output.
+	contexts : List[Dict[str, Any]]
+		Retrieval contexts that define the allowed doc_ids.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Canonical executor object.
+	"""
+	fallback = _build_empty_executor_object(bind_variables)
+
+	if not isinstance(obj, dict):
+		return fallback
+
+	answer = obj.get("answer")
+	if not isinstance(answer, str):
+		answer = "I do not know."
+	answer = answer.strip() or "I do not know."
+
+	raw_bindings = obj.get("bindings", {})
+	if not isinstance(raw_bindings, dict):
+		raw_bindings = {}
+
+	valid_doc_ids = {
+		str(ctx.get("doc_id")).strip()
+		for ctx in contexts
+		if str(ctx.get("doc_id", "")).strip()
+	}
+
+	normalized_bindings: Dict[str, Dict[str, Any]] = {}
+
+	for var_name in bind_variables:
+		entry = raw_bindings.get(var_name, {})
+		if not isinstance(entry, dict):
+			entry = {}
+
+		value = entry.get("value", None)
+
+		citations = entry.get("citations", [])
+		if isinstance(citations, str):
+			citations = [citations]
+		if not isinstance(citations, list):
+			citations = []
+
+		citations = [
+			doc_id.strip()
+			for doc_id in citations
+			if isinstance(doc_id, str) and doc_id.strip() in valid_doc_ids
+		]
+		citations = list(dict.fromkeys(citations))
+
+		if value is None:
+			citations = []
+		elif not citations:
+			value = None
+
+		normalized_bindings[var_name] = {
+			"value": value,
+			"citations": citations,
+		}
+
+	return {
+		"answer": answer,
+		"bindings": normalized_bindings,
+	}
+
+
+def _load_step_executor_json(
+	text: Any,
+	bind_variables: List[str],
+	contexts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+	"""Parse and normalize step executor JSON from model output.
+
+	Parameters
+	----------
+	text : Any
+		Model output text or wrapper object.
+	bind_variables : List[str]
+		Variables expected in the executor output.
+	contexts : List[Dict[str, Any]]
+		Retrieval contexts for validation of doc_ids.
+
+	Returns
+	-------
+	Dict[str, Any]
+		Normalized executor object.
+	"""
+	obj = _parse_json_dict(text)
+	if obj is None:
+		return _build_empty_executor_object(bind_variables)
+	return _normalize_step_executor_object(
+		obj=obj,
+		bind_variables=bind_variables,
+		contexts=contexts,
+	)
+	
 
 def execute_step(
 	config: Any,
@@ -271,16 +619,11 @@ def execute_step(
 		contexts=contexts,
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
-	obj = _load_json(response.get("text", "")) or {
-		"answer": "I do not know.",
-		"bindings": {
-			var_name: {
-				"value": None,
-				"citations": [],
-			}
-			for var_name in bind_variables
-		},
-	}
+	obj = _load_step_executor_json(
+		text=response.get("text", ""),
+		bind_variables=bind_variables,
+		contexts=contexts,
+	)
 	return {
 		"text": response.get("text"),
 		"meta": response.get("meta"),

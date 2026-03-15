@@ -1,8 +1,9 @@
 import hashlib
 import json
 import re
-import pandas as pd
 from typing import Any, Dict, Iterable, List, Optional
+
+import pandas as pd
 
 
 def _format_contexts_ragas(contexts: List[Any]) -> List[str]:
@@ -115,8 +116,53 @@ def _get_relevant_contexts(
 	]
 
 
-def _load_json(text: Any) -> Optional[Dict[str, Any]]:
-	"""Parse a JSON object from model output.
+def _extract_first_json_object(raw: str) -> Optional[str]:
+	"""Extract the first balanced JSON object substring.
+
+	Parameters
+	----------
+	raw : str
+		Raw model output text.
+
+	Returns
+	-------
+	Optional[str]
+		First balanced JSON object substring if found.
+	"""
+	start = raw.find("{")
+	if start == -1:
+		return None
+
+	depth = 0
+	in_string = False
+	escape = False
+
+	for idx in range(start, len(raw)):
+		char = raw[idx]
+
+		if in_string:
+			if escape:
+				escape = False
+			elif char == "\\":
+				escape = True
+			elif char == '"':
+				in_string = False
+			continue
+
+		if char == '"':
+			in_string = True
+		elif char == "{":
+			depth += 1
+		elif char == "}":
+			depth -= 1
+			if depth == 0:
+				return raw[start:idx + 1]
+
+	return None
+
+
+def _coerce_text_response(text: Any) -> str:
+	"""Coerce model output into a stripped raw text string.
 
 	Parameters
 	----------
@@ -125,30 +171,66 @@ def _load_json(text: Any) -> Optional[Dict[str, Any]]:
 
 	Returns
 	-------
-	Optional[dict[str, Any]]
-		Parsed JSON object if available.
+	str
+		Normalized raw text.
 	"""
 	if isinstance(text, dict) and "text" in text:
 		raw = str(text.get("text") or "")
 	else:
 		raw = str(text or "")
-	if raw.startswith("```"):
-		raw = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw)
-		raw = re.sub(r"\s*```\s*$", "", raw)
-	raw = raw.strip()
+	return raw.strip()
+
+
+def _strip_code_fences(raw: str) -> str:
+	"""Remove surrounding markdown code fences from text.
+
+	Parameters
+	----------
+	raw : str
+		Raw text.
+
+	Returns
+	-------
+	str
+		Text without surrounding code fences.
+	"""
+	text = str(raw or "").strip()
+	if not text.startswith("```"):
+		return text
+	text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text)
+	text = re.sub(r"\s*```\s*$", "", text)
+	return text.strip()
+
+
+def _parse_json_dict(text: Any) -> Optional[Dict[str, Any]]:
+	"""Parse the first JSON object from model output.
+
+	Parameters
+	----------
+	text : Any
+		Model output text or wrapper object.
+
+	Returns
+	-------
+	Optional[Dict[str, Any]]
+		Parsed JSON dict if available.
+	"""
+	raw = _strip_code_fences(_coerce_text_response(text))
 	if not raw:
 		return None
+
 	try:
 		obj = json.loads(raw)
 		return obj if isinstance(obj, dict) else None
 	except json.JSONDecodeError:
 		pass
-	start = raw.find("{")
-	end = raw.rfind("}")
-	if start == -1 or end == -1 or end <= start:
+
+	json_block = _extract_first_json_object(raw)
+	if json_block is None:
 		return None
+
 	try:
-		obj = json.loads(raw[start:end + 1])
+		obj = json.loads(json_block)
 		return obj if isinstance(obj, dict) else None
 	except json.JSONDecodeError:
 		return None

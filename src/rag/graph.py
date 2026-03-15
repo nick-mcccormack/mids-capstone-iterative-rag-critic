@@ -162,7 +162,7 @@ def _prepare_initial_state(
 		stop_due_to_duplicate_plan=False,
 		execution_trace={
 			"initial_retrieval": {},
-			"initial_answer": {},
+			"initial_answer": "",
 			"critic_rounds": [],
 			"plans": [],
 			"step_executions": [],
@@ -328,18 +328,21 @@ def _node_critic(state: GraphState) -> GraphState:
 	)
 	state = _update_llm_meta_metrics(state, resp)
 	state["critic_output"] = resp.get("object", {})
-	state["relevant_contexts"] = _dedupe_contexts(
-		_get_relevant_contexts(
-			state.get("evidence_store_contexts", []),
-			resp.get("object", {}).get("relevant_contexts"),
+
+	if state["critic_output"].get("outcome") == "decompose":
+		state["relevant_contexts"] = _dedupe_contexts(
+			_get_relevant_contexts(
+				state.get("evidence_store_contexts", []),
+				state["critic_output"].get("relevant_contexts", []),
+			)
 		)
-	)
+
 	_append_trace_list(
 		state,
 		"critic_rounds",
 		{
 			"round_idx": int(state.get("round_idx", 0)),
-			"critic_output": resp.get("object", {}),
+			"critic_output": state["critic_output"],
 			"current_answer": state.get("current_answer", ""),
 		},
 	)
