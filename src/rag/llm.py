@@ -15,6 +15,7 @@ from src.prompts.sys_prompts import (
 from src.prompts.user_prompts import (
 	get_user_prompt_base,
 	get_user_prompt_base_with_ans,
+	get_user_prompt_planner,
 	get_user_prompt_step_executor,
 )
 from src.utils.helpers import _load_json
@@ -203,6 +204,7 @@ def call_planner(
 	query: str,
 	current_answer: str,
 	contexts: List[Dict[str, Any]],
+	failed_step_history: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 	"""Generate a decomposition plan.
 
@@ -216,6 +218,8 @@ def call_planner(
 		Current answer draft.
 	contexts : list[dict[str, Any]]
 		Relevant contexts.
+	failed_step_history : Optional[list[dict[str, Any]]], default None
+		History of failed steps from earlier rounds.
 
 	Returns
 	-------
@@ -223,7 +227,12 @@ def call_planner(
 		Model text, metadata, and parsed planner object.
 	"""
 	system_prompt = get_sys_prompt_plan_decompose()
-	user_prompt = get_user_prompt_base_with_ans(query, current_answer, contexts)
+	user_prompt = get_user_prompt_planner(
+		query=query,
+		current_answer=current_answer,
+		contexts=contexts,
+		failed_step_history=failed_step_history or [],
+	)
 	response = _call_llm(config, system_prompt, user_prompt)
 	obj = _load_json(response["text"]) or {"outcome": "decompose", "plan": []}
 	return {
@@ -251,6 +260,8 @@ def rewrite_answer(
 		Current answer draft.
 	contexts : list[dict[str, Any]]
 		Relevant contexts.
+	failed_step_history : Optional[list[dict[str, Any]]], default None
+		History of failed steps from earlier rounds.
 
 	Returns
 	-------

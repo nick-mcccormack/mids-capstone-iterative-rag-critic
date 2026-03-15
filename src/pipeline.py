@@ -2,6 +2,7 @@ import time
 import uuid
 from statistics import mean
 from typing import Any, Dict, List, Optional
+from numbers import Real
 
 import mlflow
 from tqdm import tqdm
@@ -10,6 +11,41 @@ from src.observability.mlflow_client import log_dict_artifact, start_run_if_enab
 from src.rag.graph import run_graph
 from src.utils.aws_secrets import bootstrap_env
 from src.utils.config import PipelineConfig
+
+
+def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
+	"""
+	Filter metrics to MLflow-safe finite numeric values.
+
+	Parameters
+	----------
+	metrics : Dict[str, Any]
+		Raw metrics dictionary.
+
+	Returns
+	-------
+	Dict[str, float]
+		Filtered dictionary containing only finite numeric values.
+	"""
+	clean: Dict[str, float] = {}
+
+	for key, value in metrics.items():
+		if value is None:
+			continue
+		if isinstance(value, bool):
+			continue
+		if not isinstance(value, Real):
+			continue
+
+		val = float(value)
+		if val != val:
+			continue
+		if val in (float("inf"), float("-inf")):
+			continue
+
+		clean[key] = val
+
+	return clean
 
 
 def run_pipeline(
@@ -103,7 +139,7 @@ def run_experiment(
 				out = run_graph(
 					original_query_id=item.get("id"),
 					original_query=item.get("question"),
-					gold_answer=item.get("gold_answer"),
+					gold_answer=item.get("answer"),
 					config=cfg,
 				)
 
@@ -118,25 +154,47 @@ def run_experiment(
 			iterable.set_postfix({"last_s": f"{out['timing_s']:.2f}"})
 
 		elapsed = float(time.time() - start)
-		context_precision_vals = [
-			float(r["ragas_metrics"]["context_precision"])
+		
+		initial_context_precision_vals = [
+			float(r["initial_ragas_metrics"]["context_precision"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("context_precision") is not None
+			if r.get("initial_ragas_metrics", {}).get("context_precision") is not None
 		]
-		context_recall_vals = [
-			float(r["ragas_metrics"]["context_recall"])
+		initial_context_recall_vals = [
+			float(r["initial_ragas_metrics"]["context_recall"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("context_recall") is not None
+			if r.get("initial_ragas_metrics", {}).get("context_recall") is not None
 		]
-		faithfulness_vals = [
-			float(r["ragas_metrics"]["faithfulness"])
+		initial_faithfulness_vals = [
+			float(r["initial_ragas_metrics"]["faithfulness"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("faithfulness") is not None
+			if r.get("initial_ragas_metrics", {}).get("faithfulness") is not None
 		]
-		answer_acc_vals = [
-			float(r["ragas_metrics"]["answer_accuracy"])
+		initial_answer_acc_vals = [
+			float(r["initial_ragas_metrics"]["answer_accuracy"])
 			for r in results
-			if r.get("ragas_metrics", {}).get("answer_accuracy") is not None
+			if r.get("initial_ragas_metrics", {}).get("answer_accuracy") is not None
+		]
+
+		final_context_precision_vals = [
+			float(r["final_ragas_metrics"]["context_precision"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("context_precision") is not None
+		]
+		final_context_recall_vals = [
+			float(r["final_ragas_metrics"]["context_recall"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("context_recall") is not None
+		]
+		final_faithfulness_vals = [
+			float(r["final_ragas_metrics"]["faithfulness"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("faithfulness") is not None
+		]
+		final_answer_acc_vals = [
+			float(r["final_ragas_metrics"]["answer_accuracy"])
+			for r in results
+			if r.get("final_ragas_metrics", {}).get("answer_accuracy") is not None
 		]
 
 		summary = {
@@ -144,30 +202,66 @@ def run_experiment(
 			"run_name": run_name,
 			"elapsed_s": elapsed,
 			"num_queries": len(results),
-			"mean_context_precision": (
-				mean(context_precision_vals) if context_precision_vals else None
+			"mean_initial_context_precision": (
+				mean(initial_context_precision_vals) if initial_context_precision_vals else None
 			),
-			"mean_context_recall": (
-				mean(context_recall_vals) if context_recall_vals else None
+			"mean_initial_context_recall": (
+				mean(initial_context_recall_vals) if initial_context_recall_vals else None
 			),
-			"mean_faithfulness": (
-				mean(faithfulness_vals) if faithfulness_vals else None
+			"mean_initial_faithfulness": (
+				mean(initial_faithfulness_vals) if initial_faithfulness_vals else None
 			),
-			"mean_answer_accuracy": (
-				mean(answer_acc_vals) if answer_acc_vals else None
+			"mean_initial_answer_accuracy": (
+				mean(initial_answer_acc_vals) if initial_answer_acc_vals else None
+			),
+			"mean_final_context_precision": (
+				mean(final_context_precision_vals) if final_context_precision_vals else None
+			),
+			"mean_final_context_recall": (
+				mean(final_context_recall_vals) if final_context_recall_vals else None
+			),
+			"mean_final_faithfulness": (
+				mean(final_faithfulness_vals) if final_faithfulness_vals else None
+			),
+			"mean_final_answer_accuracy": (
+				mean(final_answer_acc_vals) if final_answer_acc_vals else None
 			),
 		}
 
 		if bool(cfg.use_mlflow) and mlflow.active_run():
-			mlflow.log_metrics(
+			batch_metrics = _sanitize_metrics_for_mlflow(
 				{
 					"experiment_elapsed_s": elapsed,
-					"mean_context_precision": summary["mean_context_precision"],
-					"mean_context_recall": summary["mean_context_recall"],
-					"mean_faithfulness": summary["mean_faithfulness"],
-					"mean_answer_accuracy": summary["mean_answer_accuracy"],
+					"mean_initial_context_precision": summary.get(
+						"mean_initial_context_precision"
+					),
+					"mean_initial_context_recall": summary.get(
+						"mean_initial_context_recall"
+					),
+					"mean_initial_faithfulness": summary.get(
+						"mean_initial_faithfulness"
+					),
+					"mean_initial_answer_accuracy": summary.get(
+						"mean_initial_answer_accuracy"
+					),
+					"mean_final_context_precision": summary.get(
+						"mean_final_context_precision"
+					),
+					"mean_final_context_recall": summary.get(
+						"mean_final_context_recall"
+					),
+					"mean_final_faithfulness": summary.get(
+						"mean_final_faithfulness"
+					),
+					"mean_final_answer_accuracy": summary.get(
+						"mean_final_answer_accuracy"
+					),
 				}
 			)
+
+			if batch_metrics:
+				mlflow.log_metrics(batch_metrics)
+
 			log_dict_artifact(summary, f"batch_summaries/{batch_id}.json")
 
 		return {
