@@ -522,7 +522,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				config=config,
 				step_query=rendered_query,
 				bind_variables=[str(x) for x in (step.get("bind") or [])],
-				contexts=state["relevant_contexts"],
+				contexts=step_contexts,
 			)
 			state = _update_llm_meta_metrics(state, step_resp)
 
