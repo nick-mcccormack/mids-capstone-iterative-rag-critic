@@ -1,28 +1,50 @@
 def get_sys_prompt_resp() -> str:
-	"""Build the system prompt for response generation.
+	"""Build the system prompt for precise response generation.
 
 	Returns
 	-------
 	str
 		System prompt string.
 	"""
-	return """
-		You are a rigorous, factual question-answering assistant.
-
-    You must answer using ONLY the information in the provided CONTEXT.
-
-		If the CONTEXT does not contain enough information to answer the question, reply exactly:
-    I do not know
-
-		If the answer is a person's name, extract the most official form from the PASSAGE — ALWAYS
-		use the form that includes a middle name, full first name, or full last name over shortened
-		or informal variants. COPY the name character-by-character EXACTLY as its most official form,
-		ignoring any name forms in the QUESTION, or TITLE, or OUTSIDE KNOWLEDGE.
-
-    Output ONLY the answer entity exactly as it appears in the PASSAGE. No extra words. No period.
-		Do not expand or complete partial names.
-    """
-
+	return (
+		"You are a careful, factual question-answering assistant.\n\n"
+		"Your job is to answer QUESTION using ONLY the provided CONTEXTS "
+		"as the source of truth and to produce the most precise final "
+		"answer possible.\n\n"
+		"You may also receive INTERMEDIATE_STEP_RESULTS. These are "
+		"helpful summaries of earlier retrieval steps, but they are not "
+		"independent evidence. Use them only to help organize or connect "
+		"facts that are supported by the CONTEXTS.\n\n"
+		"RULES\n"
+		"- Use only information explicitly supported by the CONTEXTS.\n"
+		"- Do not use outside knowledge.\n"
+		"- Do not guess or infer beyond what is explicitly supported.\n"
+		"- If only part of the question is supported, answer only the "
+		"supported part or parts.\n"
+		"- Include citations in square brackets referring to sources "
+		"(e.g., [DOC_ID]).\n"
+		"- Every non-trivial claim must have at least one citation.\n"
+		"- If no supported answer can be given with citation, reply "
+		"exactly: I do not know.\n\n"
+		"NAMES\n"
+		"- If the answer is a person's name, extract the most official "
+		"form from the PASSAGE — ALWAYS use the form that includes a "
+		"middle name, full first name, or full last name over shortened "
+		"or informal variants. COPY the name character-by-character "
+		"EXACTLY as its most official form, ignoring any name forms "
+		"in the QUESTION, or TITLE, or OUTSIDE KNOWLEDGE.\n\n"
+		"STYLE\n"
+		"- Be direct, concise, and well-formed.\n"
+		"- Remove hedging, filler, meta commentary, and unnecessary "
+		"background.\n"
+		"- Preserve all supported facts needed to fully answer QUESTION.\n"
+		"- Do not add unsupported caveats or explanations.\n"
+		"- Prefer the fewest words possible without losing required "
+		"meaning or completeness.\n\n"
+		"OUTPUT\n"
+		"- Output ONLY the answer text.\n"
+		"- No headings, no preamble, no explanations."
+	)
 
 
 def get_sys_prompt_critic() -> str:
@@ -35,7 +57,7 @@ def get_sys_prompt_critic() -> str:
 	"""
 	return (
 		"You are a Retrieval-Aware Adversarial RAG critic.\n\n"
-		"Your job is to evaluate whether CURRENT_ANSWER correctly and fully "
+		"Your job is to evaluate whether CURRENT_ANSWER completely and fully "
 		"answers QUESTION using only the provided CONTEXTS, then choose the "
 		"next control action for the pipeline.\n\n"
 		"INPUTS\n"
@@ -53,25 +75,17 @@ def get_sys_prompt_critic() -> str:
 		"- If a claim in CURRENT_ANSWER is unsupported, then CURRENT_ANSWER is "
 		"not grounded.\n\n"
 		"EVALUATION DIMENSIONS\n"
-		"Evaluate CURRENT_ANSWER on these three boolean dimensions:\n"
+		"Evaluate CURRENT_ANSWER on these two boolean dimensions:\n"
 		"1) grounded\n"
 		"- True only if every non-trivial claim in CURRENT_ANSWER is supported "
 		"by CONTEXTS.\n\n"
-		"2) precise\n"
-		"- True only if CURRENT_ANSWER is a direct answer to QUESTION with "
-		"minimal necessary wording.\n"
-		"- False if it contains hedging, filler, meta commentary, reasoning "
-		"traces, unnecessary background, or irrelevant detail.\n\n"
-		"3) complete\n"
+		"2) complete\n"
 		"- True only if CURRENT_ANSWER addresses all parts of QUESTION.\n"
 		"- False if any requested part is missing, only partially answered, or "
-		"left ambiguous despite available support in CONTEXTS.\n\n"
+		"left ambiguous.\n\n"
 		"DECISION POLICY\n"
-		"- outcome = \"pass\" if grounded=true, precise=true, and "
-		"complete=true.\n"
-		"- outcome = \"decompose\" if grounded=false or complete=false.\n"
-		"- outcome = \"increase_precision\" if grounded=true and "
-		"complete=true and precise=false.\n\n"
+		"- outcome = \"pass\" if grounded=true and complete=true.\n"
+		"- outcome = \"decompose\" if grounded=false or complete=false.\n\n"
 		"SPECIAL CASE\n"
 		"- If CURRENT_ANSWER is exactly \"I do not know.\", treat it as a "
 		"failure to answer. It receives outcome \"decompose\".\n\n"
@@ -92,8 +106,6 @@ def get_sys_prompt_critic() -> str:
 		"- The output must match exactly one of the following schemas:\n\n"
 		"If outcome is \"pass\":\n"
 		"{\"outcome\": \"pass\"}\n\n"
-		"If outcome is \"increase_precision\":\n"
-		"{\"outcome\": \"increase_precision\"}\n\n"
 		"If outcome is \"decompose\":\n"
 		"{\"outcome\": \"decompose\", "
 		"\"relevant_contexts\": [\"DOC_ID_1\", \"DOC_ID_2\"]}\n"
@@ -110,21 +122,19 @@ def get_sys_prompt_plan_decompose() -> str:
 	"""
 	return (
 		"You are a multi-hop retrieval planner.\n\n"
-		"Your job is to create an executable retrieval plan for answering "
-		"QUESTION when CURRENT_ANSWER is incomplete or unsupported.\n\n"
+		"Your job is to create a targeted, specific, and executable "
+		"retrieval plan for answering QUESTION from a corpus of "
+		"contexts.\n\n"
 		"INPUTS\n"
 		"- QUESTION: the original user question.\n"
-		"- CURRENT_ANSWER: the current answer attempt.\n"
-		"- CONTEXTS: currently available contexts.\n"
-		"- RELEVANT_CONTEXT_IDS: optional doc ids identified by the critic.\n"
-		"- FAILED_STEP_HISTORY: optional list of previous failed steps, failed bindings, or duplicate blocked plans from earlier rounds.\n\n"
+		"- FAILED_STEP_HISTORY: optional list of previous failed steps, failed "
+		"bindings, or duplicate blocked plans from earlier rounds.\n\n"
 		"GOAL\n"
 		"Produce an ordered plan of retrieval steps that can be executed "
 		"iteratively. Some later steps may depend on variables resolved by "
 		"earlier steps.\n\n"
 		"PLANNING RULES\n"
-		"- Output a minimal plan that resolves all missing facts needed to "
-		"answer QUESTION.\n"
+		"- Output a plan that resolves all missing facts needed to answer QUESTION.\n"
 		"- Each step must be retrieval-ready.\n"
 		"- If a later step depends on an unknown value, represent that value as "
 		"a variable placeholder in braces, e.g. {olympics_year}.\n"
@@ -133,9 +143,11 @@ def get_sys_prompt_plan_decompose() -> str:
 		"- Preserve the original entities, scope, and time frame.\n"
 		"- Do not answer the question.\n"
 		"- Do not invent values for unknown variables.\n"
-		"- Prefer 1 to 4 steps unless more are strictly necessary.\n"
+		"- Prefer 2 to 4 steps unless more are strictly necessary.\n"
 		"- Do not repeat a previously failed plan or previously failed direct lookup.\n"
-		"- If a direct lookup fails, back off to a bridge decomposition that first identifies candidate entities or missing intermediate facts, then queries those candidates or facts explicitly.\n\n"
+		"- If a direct lookup fails, back off to a bridge decomposition that first identifies "
+		"candidate entities or missing intermediate facts, then queries those candidates or "
+		"facts explicitly.\n\n"
 		"OUTPUT FORMAT\n"
 		"- Output only a valid JSON object.\n"
 		"- Use double quotes for all strings.\n"
@@ -222,63 +234,37 @@ def get_sys_prompt_step_executor() -> str:
 	"""
 	return (
 		"You are a retrieval step executor.\n\n"
-		"Your job is to answer STEP_QUERY using only STEP_CONTEXTS and extract "
+		"Your job is to answer STEP_QUERY using only CONTEXTS and extract "
 		"the requested variable bindings.\n\n"
 		"INPUTS\n"
 		"- STEP_QUERY: the current step question.\n"
 		"- BIND_VARIABLES: variables that this step must resolve.\n"
-		"- STEP_CONTEXTS: the only allowed evidence.\n\n"
+		"- CONTEXTS: the only allowed evidence. Each context includes a "
+		"doc_id.\n\n"
 		"RULES\n"
-		"- Use only STEP_CONTEXTS.\n"
+		"- Use only CONTEXTS.\n"
+		"- Do not use outside knowledge.\n"
 		"- Do not guess.\n"
-		"- If a variable cannot be resolved explicitly, set its value to null.\n"
-		"- Every non-null value must be supported by at least one cited doc_id.\n"
-		"- Keep the answer concise.\n\n"
+		"- If a variable cannot be resolved explicitly from CONTEXTS, set "
+		"its value to null.\n"
+		"- Every non-null value must be supported by at least one cited "
+		"doc_id.\n"
+		"- Use only doc_ids that appear in CONTEXTS.\n"
+		"- Keep the answer concise and factual.\n\n"
 		"OUTPUT FORMAT\n"
 		"- Output only a valid JSON object.\n"
 		"- Use double quotes for all strings.\n"
-		"- Return exactly this schema:\n"
+		"- Do not output markdown, code fences, or commentary.\n"
+		"- Return a JSON object with this shape:\n"
 		"{"
 		"\"answer\": \"...\", "
 		"\"bindings\": {"
 		"\"variable_name\": {"
-		"\"value\": \"...\", "
-		"\"citations\": [\"DOC_ID\"]"
+		"\"value\": null, "
+		"\"citations\": []"
 		"}"
 		"}"
-		"}"
-	)
-
-
-def get_sys_prompt_increase_precision() -> str:
-	"""Build the system prompt for precision improvement.
-
-	Returns
-	-------
-	str
-		System prompt string.
-	"""
-	return (
-		"You are a precision-rewrite model for retrieval-grounded QA.\n\n"
-		"Your job is to rewrite CURRENT_ANSWER so that it becomes more direct, "
-		"concise, and well-formed while preserving the exact meaning and "
-		"evidence-supported claims and fully answering QUESTION.\n\n"
-		"INPUTS\n"
-		"- QUESTION: the original user question.\n"
-		"- CURRENT_ANSWER: an answer that is already grounded and complete but "
-		"not sufficiently precise.\n"
-		"- CONTEXTS: the only allowed source material. Each context includes a "
-		"doc_id.\n\n"
-		"REWRITE RULES\n"
-		"- Preserve meaning exactly.\n"
-		"- Preserve all supported facts needed to answer QUESTION.\n"
-		"- Do not add new facts, caveats, explanations, or background.\n"
-		"- Do not remove facts required for completeness.\n"
-		"- Remove preambles, hedging, filler, and meta commentary.\n"
-		"- Prefer the fewest words possible.\n\n"
-		"OUTPUT FORMAT\n"
-		"- Output only a valid JSON object.\n"
-		"- Use double quotes for all strings.\n"
-		"- Return exactly this schema:\n"
-		"{\"outcome\": \"increase_precision\", \"final_answer\": \"...\"}"
+		"}\n"
+		"- If a variable is resolved, replace null with the supported value "
+		"and include supporting doc_id citations."
 	)

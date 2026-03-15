@@ -1,6 +1,6 @@
 import json
-from typing import Any, Dict, List, Optional, TypedDict
 from numbers import Real
+from typing import Any, Dict, List, Optional, TypedDict
 
 import mlflow
 from langgraph.graph import END, START, StateGraph
@@ -12,7 +12,6 @@ from src.rag.llm import (
 	call_planner,
 	execute_step,
 	generate_answer,
-	rewrite_answer,
 )
 from src.rag.reranker import run_reranking
 from src.rag.retriever import run_retrieval
@@ -175,8 +174,7 @@ def _prepare_initial_state(
 
 
 def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
-	"""
-	Keep only MLflow-safe numeric metrics.
+	"""Keep only MLflow-safe numeric metrics.
 
 	Parameters
 	----------
@@ -199,7 +197,7 @@ def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
 			continue
 
 		val = float(value)
-		if val != val:  # NaN check
+		if val != val:
 			continue
 		if val in (float("inf"), float("-inf")):
 			continue
@@ -207,8 +205,6 @@ def _sanitize_metrics_for_mlflow(metrics: Dict[str, Any]) -> Dict[str, float]:
 		clean[key] = val
 
 	return clean
-
-
 
 
 def _get_failed_step_history(state: GraphState) -> List[Dict[str, Any]]:
@@ -280,7 +276,6 @@ def _node_initial_retrieve(state: GraphState) -> GraphState:
 	unique_contexts = _dedupe_contexts(selected)
 	state["evidence_store_contexts"] = unique_contexts
 	state["relevant_contexts"] = unique_contexts
-	state["final_contexts"] = unique_contexts
 	state["execution_trace"]["initial_retrieval"] = {
 		"query": query,
 		"contexts": unique_contexts,
@@ -368,8 +363,6 @@ def _route_after_critic(state: GraphState) -> str:
 	config = state["config"]
 	if outcome == "pass":
 		return "finalize"
-	if outcome == "increase_precision":
-		return "precision"
 	if not bool(getattr(config, "iterative", True)):
 		return "finalize"
 	if int(state.get("round_idx", 0)) >= int(getattr(config, "max_rounds", 3)):
@@ -394,8 +387,6 @@ def _node_planner(state: GraphState) -> GraphState:
 	resp = call_planner(
 		config=state["config"],
 		query=state["original_query"],
-		current_answer=state.get("current_answer", ""),
-		contexts=state.get("relevant_contexts", []),
 		failed_step_history=failed_step_history,
 	)
 	state = _update_llm_meta_metrics(state, resp)
@@ -435,8 +426,6 @@ def _node_planner(state: GraphState) -> GraphState:
 		},
 	)
 	return state
-
-
 
 
 def _route_after_planner(state: GraphState) -> str:
@@ -481,9 +470,11 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 
 	while total_steps < max_steps:
 		progress = False
+
 		for raw_step in plan:
 			step = dict(raw_step)
 			step_id = str(step.get("step_id") or f"s{total_steps + 1}")
+
 			if step_id in completed_steps or step_id in failed_steps:
 				continue
 
@@ -508,6 +499,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				continue
 
 			rendered_query = _render_template(query_template, bindings)
+
 			step_contexts = run_retrieval(
 				config=config,
 				query_idx=total_steps,
@@ -518,26 +510,28 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				query=rendered_query,
 				contexts=step_contexts,
 			)[:step_top_k]
+
 			state["evidence_store_contexts"] = _dedupe_contexts(
 				state.get("evidence_store_contexts", []) + list(step_contexts)
+			)
+			state["relevant_contexts"] = _dedupe_contexts(
+				state.get("relevant_contexts", []) + list(step_contexts)
 			)
 
 			step_resp = execute_step(
 				config=config,
 				step_query=rendered_query,
 				bind_variables=[str(x) for x in (step.get("bind") or [])],
-				step_contexts=step_contexts,
+				contexts=step_contexts,
 			)
 			state = _update_llm_meta_metrics(state, step_resp)
 
 			step_result = step_resp.get("object", {})
 			resolved_any = False
 			bindings_out = step_result.get("bindings") or {}
+
 			for var_name, payload in bindings_out.items():
-				if isinstance(payload, dict):
-					value = payload.get("value")
-				else:
-					value = payload
+				value = payload.get("value") if isinstance(payload, dict) else payload
 				if value not in (None, ""):
 					bindings[str(var_name)] = value
 					resolved_any = True
@@ -547,6 +541,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				if resolved_any or not step.get("bind")
 				else "failed_bind"
 			)
+
 			_append_trace_list(
 				state,
 				"step_executions",
@@ -571,6 +566,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 
 			total_steps += 1
 			progress = True
+
 			if total_steps >= max_steps:
 				break
 
@@ -595,51 +591,38 @@ def _node_answer_from_evidence(state: GraphState) -> GraphState:
 	GraphState
 		Updated state.
 	"""
-	contexts = _dedupe_contexts(state.get("evidence_store_contexts", []))
+	contexts = _dedupe_contexts(state.get("relevant_contexts", []))
 	max_contexts_final = getattr(state["config"], "max_contexts_final", None)
+
 	if max_contexts_final is not None:
 		max_contexts_final = int(max_contexts_final)
 		contexts = contexts[:max_contexts_final]
+
 	state["relevant_contexts"] = contexts
-	state["final_contexts"] = contexts
+
+	all_step_summaries = state.get("execution_trace", {}).get(
+		"step_executions",
+		[],
+	)
+	step_summaries = [
+		step
+		for step in all_step_summaries
+		if step.get("status") == "completed"
+	]
 
 	resp = generate_answer(
 		config=state["config"],
 		query=state["original_query"],
 		contexts=contexts,
+		step_summaries=step_summaries,
 	)
 	state = _update_llm_meta_metrics(state, resp)
 	state["current_answer"] = resp["text"]
 	state["execution_trace"]["final_answer_call"] = {
 		"answer": state["current_answer"],
 		"contexts": contexts,
+		"step_summaries": step_summaries,
 	}
-	return state
-
-
-def _node_precision(state: GraphState) -> GraphState:
-	"""Rewrite the current answer for precision.
-
-	Parameters
-	----------
-	state : GraphState
-		Current graph state.
-
-	Returns
-	-------
-	GraphState
-		Updated state.
-	"""
-	resp = rewrite_answer(
-		config=state["config"],
-		query=state["original_query"],
-		current_answer=state.get("current_answer", ""),
-		contexts=state.get("relevant_contexts", []),
-	)
-	state = _update_llm_meta_metrics(state, resp)
-	state["current_answer"] = resp.get("text") or state.get("current_answer", "")
-	state["final_answer"] = resp.get("text") or state.get("current_answer", "")
-	state["execution_trace"]["precision_rewrite"] = resp.get("text", "")
 	return state
 
 
@@ -656,15 +639,18 @@ def _node_finalize(state: GraphState) -> GraphState:
 	GraphState
 		Updated state.
 	"""
-	iterative = bool(getattr(state["config"], "iterative", False))
+	config = state["config"]
+	iterative = bool(getattr(config, "iterative", False))
 
 	if not state.get("final_answer"):
 		state["final_answer"] = state.get("current_answer", "I do not know.")
+
 	if not state.get("final_contexts"):
 		state["final_contexts"] = list(state.get("relevant_contexts", []))
+
 	if not state.get("final_ragas_metrics"):
 		state["final_ragas_metrics"] = evaluate_answer(
-			config=state["config"],
+			config=config,
 			query=state["original_query"],
 			model_answer=state["final_answer"],
 			gold_answer=state.get("gold_answer"),
@@ -679,14 +665,17 @@ def _node_finalize(state: GraphState) -> GraphState:
 		).items()
 	}
 
-	if final_safe_metrics:
-		mlflow.log_metrics(final_safe_metrics)
+	critic_rounds = state.get("execution_trace", {}).get("critic_rounds", [])
 
-	if iterative and len(state.get("execution_trace", {}).get("critic_rounds", None)) > 1:
+	if iterative and len(critic_rounds) > 1:
 		initial_answer = state.get("execution_trace", {}).get("initial_answer")
-		initial_contexts = state.get("execution_trace", {}).get("initial_retrieval", {}).get("contexts", [])
+		initial_contexts = state.get("execution_trace", {}).get(
+			"initial_retrieval",
+			{},
+		).get("contexts", [])
+
 		state["initial_ragas_metrics"] = evaluate_answer(
-			config=state["config"],
+			config=config,
 			query=state["original_query"],
 			model_answer=initial_answer,
 			gold_answer=state.get("gold_answer"),
@@ -696,7 +685,6 @@ def _node_finalize(state: GraphState) -> GraphState:
 		state["initial_ragas_metrics"] = state["final_ragas_metrics"]
 
 	initial_metrics = state.get("initial_ragas_metrics", {}) or {}
-	
 	initial_safe_metrics = {
 		f"initial_{key}": value
 		for key, value in _sanitize_metrics_for_mlflow(
@@ -704,20 +692,30 @@ def _node_finalize(state: GraphState) -> GraphState:
 		).items()
 	}
 
-	if initial_safe_metrics:
-		mlflow.log_metrics(initial_safe_metrics)
-
-	if bool(getattr(state["config"], "use_mlflow", True)) and mlflow.active_run():
+	if bool(getattr(config, "use_mlflow", True)) and mlflow.active_run():
 		mlflow.log_params(
 			{
 				"original_query_id": state["original_query_id"],
 				"original_query": state["original_query"],
-				"num_final_contexts": len(state.get("final_contexts", [])),
-				"num_evidence_contexts": len(state.get("evidence_store_contexts", [])),
 			}
 		)
 
-		
+		mlflow.log_metrics(
+			{
+				"num_final_contexts": float(
+					len(state.get("final_contexts", [])),
+				),
+				"num_evidence_contexts": float(
+					len(state.get("evidence_store_contexts", [])),
+				),
+			}
+		)
+
+		if final_safe_metrics:
+			mlflow.log_metrics(final_safe_metrics)
+
+		if initial_safe_metrics:
+			mlflow.log_metrics(initial_safe_metrics)
 
 		log_dict_artifact(
 			state["execution_trace"],
@@ -739,6 +737,7 @@ def _node_finalize(state: GraphState) -> GraphState:
 			},
 			f"results/{state['original_query_id']}.json",
 		)
+
 	return state
 
 
@@ -773,7 +772,6 @@ def _build_graph(iterative: bool) -> Any:
 	graph.add_node("planner", _node_planner)
 	graph.add_node("execute_plan", _node_execute_plan)
 	graph.add_node("answer_from_evidence", _node_answer_from_evidence)
-	graph.add_node("precision", _node_precision)
 
 	graph.add_edge("initial_answer", "critic")
 	graph.add_conditional_edges(
@@ -781,7 +779,6 @@ def _build_graph(iterative: bool) -> Any:
 		_route_after_critic,
 		{
 			"planner": "planner",
-			"precision": "precision",
 			"finalize": "finalize",
 		},
 	)
@@ -795,7 +792,6 @@ def _build_graph(iterative: bool) -> Any:
 	)
 	graph.add_edge("execute_plan", "answer_from_evidence")
 	graph.add_edge("answer_from_evidence", "critic")
-	graph.add_edge("precision", "finalize")
 	graph.add_edge("finalize", END)
 	return graph.compile()
 
@@ -843,6 +839,7 @@ def run_graph(
 		"original_query": final_state["original_query"],
 		"gold_answer": final_state.get("gold_answer"),
 		"final_answer": final_state.get("final_answer", ""),
+		"final_contexts": final_state.get("final_contexts", []),
 		"relevant_contexts": final_state.get("relevant_contexts", []),
 		"evidence_store_contexts": final_state.get("evidence_store_contexts", []),
 		"execution_trace": final_state.get("execution_trace", {}),

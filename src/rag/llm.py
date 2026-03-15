@@ -7,7 +7,6 @@ import boto3
 
 from src.prompts.sys_prompts import (
 	get_sys_prompt_critic,
-	get_sys_prompt_increase_precision,
 	get_sys_prompt_plan_decompose,
 	get_sys_prompt_resp,
 	get_sys_prompt_step_executor,
@@ -131,6 +130,7 @@ def generate_answer(
 	config: Any,
 	query: str,
 	contexts: List[Dict[str, Any]],
+	step_summaries: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 	"""Generate an answer from retrieved contexts.
 
@@ -140,16 +140,22 @@ def generate_answer(
 		Pipeline config.
 	query : str
 		Question text.
-	contexts : list[dict[str, Any]]
+	contexts : List[Dict[str, Any]]
 		Retrieved contexts.
+	step_summaries : Optional[List[Dict[str, Any]]], default None
+		Optional executed step summaries to include in the prompt.
 
 	Returns
 	-------
-	dict[str, Any]
+	Dict[str, Any]
 		Model response payload.
 	"""
 	system_prompt = get_sys_prompt_resp()
-	user_prompt = get_user_prompt_base(query, contexts)
+	user_prompt = get_user_prompt_base(
+		query=query,
+		contexts=contexts,
+		step_summaries=step_summaries,
+	)
 	response = _call_llm(config, system_prompt, user_prompt)
 	return {
 		"text": response.get("text"),
@@ -202,8 +208,6 @@ def call_critic(
 def call_planner(
 	config: Any,
 	query: str,
-	current_answer: str,
-	contexts: List[Dict[str, Any]],
 	failed_step_history: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 	"""Generate a decomposition plan.
@@ -214,10 +218,6 @@ def call_planner(
 		Pipeline config.
 	query : str
 		Original question text.
-	current_answer : str
-		Current answer draft.
-	contexts : list[dict[str, Any]]
-		Relevant contexts.
 	failed_step_history : Optional[list[dict[str, Any]]], default None
 		History of failed steps from earlier rounds.
 
@@ -229,8 +229,6 @@ def call_planner(
 	system_prompt = get_sys_prompt_plan_decompose()
 	user_prompt = get_user_prompt_planner(
 		query=query,
-		current_answer=current_answer,
-		contexts=contexts,
 		failed_step_history=failed_step_history or [],
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
@@ -242,49 +240,11 @@ def call_planner(
 	}
 
 
-def rewrite_answer(
-	config: Any,
-	query: str,
-	current_answer: str,
-	contexts: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-	"""Rewrite a grounded answer to improve precision.
-
-	Parameters
-	----------
-	config : Any
-		Pipeline config.
-	query : str
-		Original question text.
-	current_answer : str
-		Current answer draft.
-	contexts : list[dict[str, Any]]
-		Relevant contexts.
-	failed_step_history : Optional[list[dict[str, Any]]], default None
-		History of failed steps from earlier rounds.
-
-	Returns
-	-------
-	dict[str, Any]
-		Model text, metadata, and parsed object.
-	"""
-	system_prompt = get_sys_prompt_increase_precision()
-	user_prompt = get_user_prompt_base_with_ans(query, current_answer, contexts)
-	resp = _call_llm(config, system_prompt, user_prompt)
-	obj = _load_json(resp["text"]) or {}
-	final_answer = obj.get("final_answer") or resp.get("text")
-	return {
-		"text": final_answer,
-		"meta": resp.get("meta"),
-		"object": obj,
-	}
-
-
 def execute_step(
 	config: Any,
 	step_query: str,
 	bind_variables: List[str],
-	step_contexts: List[Dict[str, Any]],
+	contexts: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
 	"""Execute one decomposition step and extract variable bindings.
 
@@ -294,26 +254,32 @@ def execute_step(
 		Pipeline config.
 	step_query : str
 		Rendered step query.
-	bind_variables : list[str]
+	bind_variables : List[str]
 		Variables to bind from this step.
-	step_contexts : list[dict[str, Any]]
-		Step retrieval contexts.
+	contexts : List[Dict[str, Any]]
+		Retrieval contexts for this step.
 
 	Returns
 	-------
-	dict[str, Any]
+	Dict[str, Any]
 		Model text, metadata, and parsed object.
 	"""
 	system_prompt = get_sys_prompt_step_executor()
 	user_prompt = get_user_prompt_step_executor(
 		step_query=step_query,
 		bind_variables=bind_variables,
-		step_contexts=step_contexts,
+		contexts=contexts,
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
-	obj = _load_json(response["text"]) or {
+	obj = _load_json(response.get("text", "")) or {
 		"answer": "I do not know.",
-		"bindings": {},
+		"bindings": {
+			var_name: {
+				"value": None,
+				"citations": [],
+			}
+			for var_name in bind_variables
+		},
 	}
 	return {
 		"text": response.get("text"),
