@@ -1,6 +1,6 @@
 import app as st
 
-from streamlit_app.data.doc_loader import get_formatted_results
+from data.doc_loader import get_formatted_results
 
 
 def get_sidebar():
