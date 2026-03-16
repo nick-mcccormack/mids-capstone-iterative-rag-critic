@@ -40,7 +40,6 @@ dist/
 *.egg-info/
 
 # Data / model artifacts (don’t version large binary outputs)
-data/
 datasets/
 models/
 checkpoints/
