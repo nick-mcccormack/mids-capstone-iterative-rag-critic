@@ -2,11 +2,11 @@ import os
 
 import streamlit as st
 
-from components.sidebar import get_sidebar
-from components.query_details import pick_query, render_workflow
-from components.summary_results import render_ragas_metrics_table
-from utils.helpers import _center_header
-from utils.initialize_state import state_init
+from streamlit_app.components.sidebar import get_sidebar
+from streamlit_app.components.query_details import pick_query, render_workflow
+from streamlit_app.components.summary_results import render_ragas_metrics_table
+from streamlit_app.utils.helpers import _center_header
+from streamlit_app.utils.initialize_state import state_init
 
 
 LOGO_PATH = os.path.join(os.getcwd(), "images", "logo.jpg")

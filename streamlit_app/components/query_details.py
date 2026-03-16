@@ -1,7 +1,7 @@
-import streamlit as st
+import app as st
 
-from data.doc_loader import get_raw_results
-from utils.helpers import _go_to_query_selector, _render_labeled_heading
+from streamlit_app.data.doc_loader import get_raw_results
+from streamlit_app.utils.helpers import _go_to_query_selector, _render_labeled_heading
 
 
 QUERY_TABLE_COLUMNS = [

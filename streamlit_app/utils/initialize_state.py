@@ -1,6 +1,6 @@
 import streamlit as st
 
-from data.doc_loader import get_formatted_results
+from streamlit_app.data.doc_loader import get_formatted_results
 
 
 def state_init() -> None:

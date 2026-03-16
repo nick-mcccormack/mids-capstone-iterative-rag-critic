@@ -1,11 +1,11 @@
 
 
-import streamlit as st
+import app as st
 
 from typing import Dict
 
-from utils.calcs import get_ragas_metrics
-from utils.helpers import _format_pct_delta
+from streamlit_app.utils.calcs import get_ragas_metrics
+from streamlit_app.utils.helpers import _format_pct_delta
 
 
 def render_ragas_metrics_table() -> None:
