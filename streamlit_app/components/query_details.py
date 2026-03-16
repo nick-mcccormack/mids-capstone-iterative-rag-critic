@@ -260,7 +260,7 @@ def render_workflow(max_critic_loops: int) -> None:
 	col1, _ = st.columns([1, 4])
 	with col1:
 		st.button(
-			"Pick New Query",
+			"⏮ Pick New Query",
 			on_click=_go_to_query_selector,
 			key="pick_new_query_bottom",
 		)
