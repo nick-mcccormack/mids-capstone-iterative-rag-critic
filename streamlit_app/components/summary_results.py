@@ -1,6 +1,6 @@
 
 
-import app as st
+import streamlit as st
 
 from typing import Dict
 

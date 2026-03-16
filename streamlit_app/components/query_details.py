@@ -1,4 +1,4 @@
-import app as st
+import streamlit as st
 
 from data.doc_loader import get_raw_results
 from utils.helpers import _go_to_query_selector, _render_labeled_heading

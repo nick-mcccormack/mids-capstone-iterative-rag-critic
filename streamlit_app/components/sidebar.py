@@ -1,4 +1,4 @@
-import app as st
+import streamlit as st
 
 from data.doc_loader import get_formatted_results
 
