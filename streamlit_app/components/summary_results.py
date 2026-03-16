@@ -78,16 +78,16 @@ def render_ragas_metrics_table() -> None:
 				<th style="text-align: left; padding: 12px 14px;">
 					RAG Architecture
 				</th>
-				<th style="text-align: center; padding: 12px 14px;">
+				<th style="text-align: left; padding: 12px 14px;">
 					Answer Accuracy
 				</th>
-				<th style="text-align: center; padding: 12px 14px;">
+				<th style="text-align: left; padding: 12px 14px;">
 					Context Recall
 				</th>
-				<th style="text-align: center; padding: 12px 14px;">
+				<th style="text-align: left; padding: 12px 14px;">
 					Context Precision
 				</th>
-				<th style="text-align: center; padding: 12px 14px;">
+				<th style="text-align: left; padding: 12px 14px;">
 					Faithfulness
 				</th>
 			</tr>
@@ -97,16 +97,16 @@ def render_ragas_metrics_table() -> None:
 				<td style="padding: 14px; font-weight: 600;">
 					{initial_row["RAG Architecture"]}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Answer Accuracy"]):.4f}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Context Recall"]):.4f}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Context Precision"]):.4f}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Faithfulness"]):.4f}
 				</td>
 			</tr>
@@ -114,16 +114,16 @@ def render_ragas_metrics_table() -> None:
 				<td style="padding: 14px; font-weight: 600;">
 					{final_row["RAG Architecture"]}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Answer Accuracy"]}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Context Recall"]}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Context Precision"]}
 				</td>
-				<td style="padding: 14px; text-align: center; font-weight: 600;">
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Faithfulness"]}
 				</td>
 			</tr>
