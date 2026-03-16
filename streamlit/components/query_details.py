@@ -1,11 +1,4 @@
-import os
-import sys
-
 import streamlit as st
-
-STREAMLIT_ROOT = os.path.dirname(os.getcwd())
-if STREAMLIT_ROOT not in sys.path:
-	sys.path.append(STREAMLIT_ROOT)
 
 from data.doc_loader import get_raw_results
 from utils.helpers import _go_to_query_selector, _render_labeled_heading
