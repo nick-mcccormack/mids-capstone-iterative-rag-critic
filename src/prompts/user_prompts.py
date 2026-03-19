@@ -29,19 +29,17 @@ def _format_step_summaries(
 		rendered_query = step.get("rendered_query")
 		step_result = step.get("step_result", {})
 		answer = step_result.get("answer")
-		bindings = step_result.get("bindings", {})
+		binding = step_result.get("binding")
 
 		lines.append(f"STEP {idx}")
 		lines.append(f"QUERY: {rendered_query or ''}")
 		lines.append(f"ANSWER: {answer or ''}")
 
-		if bindings:
-			lines.append(
-				"BINDINGS:"
-			)
+		if binding is not None:
+			lines.append("BINDING:")
 			lines.append(
 				json.dumps(
-					bindings,
+					binding,
 					ensure_ascii=False,
 					indent=2,
 					sort_keys=True,
@@ -140,7 +138,7 @@ def get_user_prompt_base_with_ans(
 
 def get_user_prompt_step_executor(
 	step_query: str,
-	bind_variables: List[str],
+	bind_variable: Optional[str],
 	contexts: List[Dict[str, Any]],
 ) -> str:
 	"""Build the user prompt for the step executor.
@@ -149,8 +147,9 @@ def get_user_prompt_step_executor(
 	----------
 	step_query : str
 		Rendered step query.
-	bind_variables : List[str]
-		Variables this step should resolve.
+	bind_variable : Optional[str]
+		Single variable this step should resolve, or None if no binding is
+		requested.
 	contexts : List[Dict[str, Any]]
 		Retrieved contexts.
 
@@ -163,8 +162,8 @@ def get_user_prompt_step_executor(
 	return (
 		"STEP_QUERY:\n"
 		f"{step_query}\n\n"
-		"BIND_VARIABLES:\n"
-		f"{json.dumps(bind_variables, ensure_ascii=False, indent=2)}\n\n"
+		"BIND_VARIABLE:\n"
+		f"{json.dumps(bind_variable, ensure_ascii=False)}\n\n"
 		"CONTEXTS:\n"
 		"---BEGIN CONTEXTS---\n"
 		f"{ctx}\n"
