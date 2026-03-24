@@ -269,9 +269,11 @@
     }
   },
   {
-    "_id": "5ae1d5a3554299234fd04319",
-    "answer": "Curtis James Martin Jr.",
+    "id": "5ae1d5a3554299234fd04319",
     "question": "Which football player that topped the 10,000-yard career rushing mark has played for the New England Patriots?",
+    "answer": "Curtis James Martin Jr.",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Paul Boudreau",
@@ -390,9 +392,7 @@
           " In 2008, the squad went to China to train Chinese dancers for the 2008 Summer Olympics."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae2ad6b5542996483e64a3d",
@@ -1152,9 +1152,11 @@
     }
   },
   {
-    "_id": "5abb11c15542992ccd8e7ef8",
-    "answer": "March 30, 2025",
+    "id": "5abb11c15542992ccd8e7ef8",
     "question": "Selena Quintanilla-Pérez's assistant and head of her fan club will be eligible for parole on what date?",
+    "answer": "March 30, 2025",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Mirador de la Flor",
@@ -1255,9 +1257,7 @@
           " She is leaning against a concrete pillar looking towards the Corpus Christi Bay."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae3dce45542994393b9e783",
@@ -1545,9 +1545,11 @@
     }
   },
   {
-    "_id": "5ab1e76c554299449642c800",
-    "answer": "Dupont Plaza Hotel",
+    "id": "5ab1e76c554299449642c800",
     "question": "Which of the three worst hotel fires in modern US History occurred most recently?",
+    "answer": "Dupont Plaza Hotel",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "MGM Grand fire",
@@ -1651,9 +1653,7 @@
           " The region was part of New France from 1679–1763, ruled by Great Britain from 1763–1783, and part of the United States of America 1783–present."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adf35935542993344016c36",
@@ -1950,9 +1950,11 @@
     }
   },
   {
-    "_id": "5adf227a5542992d7e9f92a6",
-    "answer": "Hamlet",
+    "id": "5adf227a5542992d7e9f92a6",
     "question": "Josephine de Reszke made her debut in what grand opera?",
+    "answer": "Hamlet",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Josephine de Reszke",
@@ -2046,9 +2048,7 @@
           " Two recordings nominated for a Grammy Award."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5abdf72055429976d4830a37",
@@ -3088,9 +3088,11 @@
     }
   },
   {
-    "_id": "5ab7bbbf55429928e1fe38bf",
-    "answer": "Kansas City crime family",
+    "id": "5ab7bbbf55429928e1fe38bf",
     "question": " William Cammisano was part of which Mafia family?",
+    "answer": "Kansas City crime family",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "William Cammisano",
@@ -3182,14 +3184,14 @@
           " In his testimony he claimed that media tycoon and prime minister Silvio Berlusconi made a deal with the Sicilian Mafia in 1993 that put the country \"in the hands\" of Cosa Nostra."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5adce3265542992c1e3a2466",
-    "answer": "Baron of Holberg",
+    "id": "5adce3265542992c1e3a2466",
     "question": "What title did the author of Det norske Theater's first production hold ? ",
+    "answer": "Baron of Holberg",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Det norske Theater (Bergen)",
@@ -3295,9 +3297,7 @@
           " The theatre played at the old comedy house built in 1800."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac1a2f755429964131be258",
@@ -5150,9 +5150,11 @@
     }
   },
   {
-    "_id": "5a85a37d5542997175ce1fe5",
-    "answer": "two termini",
+    "id": "5a85a37d5542997175ce1fe5",
     "question": "How many termini does the train that runs on the C&M subdivision and runs between Chicago and the Pacific Northwest serve?",
+    "answer": "two termini",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "C&amp;M Subdivision",
@@ -5341,9 +5343,7 @@
           " It later featured full-length \"Super Dome\" cars."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5abc5603554299700f9d7875",
@@ -6436,9 +6436,11 @@
     }
   },
   {
-    "_id": "5ac4e593554299076e296e37",
-    "answer": "rhythm guitar",
+    "id": "5ac4e593554299076e296e37",
     "question": "OU812 was the second album to feature a vocalist that also played what instrument in \"Finish What Ya Started\"?",
+    "answer": "rhythm guitar",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Finish What Ya Started",
@@ -6570,9 +6572,7 @@
           " Her second album, \"Ensen, was released by Partisan Records in 2017, also to comsiderable acclaim."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac308135542990b17b154f4",
@@ -7188,9 +7188,11 @@
     }
   },
   {
-    "_id": "5a85d6d95542996432c570fb",
-    "answer": "the jack",
+    "id": "5a85d6d95542996432c570fb",
     "question": "What is one element of House dance where the dancer ripples his or her torso back and forth?",
+    "answer": "the jack",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "House dance",
@@ -7279,9 +7281,7 @@
           " Established in 2007, HDI was the only event of its kind that exclusively focuses on the dance forms associated with house music culture (as compared to hip-hop dance forms such as b-boying, popping, locking, krumping, etc.)."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ab53bee554299637185c526",
@@ -8067,9 +8067,11 @@
     }
   },
   {
-    "_id": "5a7bbee85542997c3ec97270",
-    "answer": "Jordan Ridgeway",
+    "id": "5a7bbee85542997c3ec97270",
     "question": "Rafe Hernandez is a fictional character who played with Chrishell Stause's charachter on Days of our live?",
+    "answer": "Jordan Ridgeway",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Rafe Hernandez",
@@ -8179,14 +8181,14 @@
           " When a grief-stricken Hope murders Stefano, Rafe helps her cover it up."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5abc3c545542993a06baf89f",
-    "answer": "Mexico",
+    "id": "5abc3c545542993a06baf89f",
     "question": "Codex Escalada shows an apparition to the saint that is a native of which country?",
+    "answer": "Mexico",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Codex Escalada",
@@ -8287,9 +8289,7 @@
           " The codex is held in the Austrian National Library in Vienna."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adf0cbd5542993a75d263e0",
@@ -8365,9 +8365,11 @@
     }
   },
   {
-    "_id": "5a8ceb4955429941ae14df43",
-    "answer": "Niño",
+    "id": "5a8ceb4955429941ae14df43",
     "question": "What was the nickname of the player who played his final season for the 2016 Miami Dolphins before dying in an accident?",
+    "answer": "Niño",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "2016 Miami Marlins season",
@@ -8486,9 +8488,7 @@
           " However, in Griese's final season the Dolphins would only play mediocre football finishing in third place with an 8-8 record."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ab4f8c95542990594ba9cbb",
@@ -8576,9 +8576,11 @@
     }
   },
   {
-    "_id": "5ab6cebd55429954757d3378",
-    "answer": "hunt",
+    "id": "5ab6cebd55429954757d3378",
     "question": "What kind of act does Whaling in Australia and Right whale have in common?",
+    "answer": "hunt",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Whaling in Australia",
@@ -8677,9 +8679,7 @@
           " Despite its name, the pygmy right whale may have more in common with the gray whale and rorquals than the bowhead and right whales."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a75da235542992db94736f9",
@@ -9062,9 +9062,11 @@
     }
   },
   {
-    "_id": "5ae72e5d5542991e8301cba8",
-    "answer": "third baseman",
+    "id": "5ae72e5d5542991e8301cba8",
     "question": "What position did the winner of the MVP in Pool C of the 2017 WBC play?",
+    "answer": "third baseman",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "2017 World Baseball Classic – Pool C",
@@ -9155,9 +9157,7 @@
           " Three teams competed in a round robin competition, with the top team and bottom teams proceeding to their respective sections of the play-offs: the top team played for advancement to Group I."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adf33965542993344016c20",
@@ -9719,9 +9719,11 @@
     }
   },
   {
-    "_id": "5abb254c5542992ccd8e7f29",
-    "answer": "German Type IXC U-boat",
+    "id": "5abb254c5542992ccd8e7f29",
     "question": "What type of boat was the German submarine U-505 that was captured by the U.S. Navy in 1944?",
+    "answer": "German Type IXC U-boat",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Zenon B. Lukosius",
@@ -9819,14 +9821,14 @@
           " She was the only German submarine to be sunk by land-based artillery fire during the war."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ae665795542991bbc9760c9",
-    "answer": "Bombay Talkie",
+    "id": "5ae665795542991bbc9760c9",
     "question": "What film did the mother of Karan Kapoor star in in 1970?",
+    "answer": "Bombay Talkie",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Karan Kapoor",
@@ -9934,9 +9936,7 @@
           " Her other film appearances included \"Bombay Talkie\" (1970), \"Junoon\" (1978), \"Heat and Dust\" (1983), and \"Ghare Baire\" (1984)."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae74eeb5542991bbc9761e1",
@@ -10025,9 +10025,11 @@
     }
   },
   {
-    "_id": "5abbc4f955429931dba144ff",
-    "answer": "Brent Wilson was fired",
+    "id": "5abbc4f955429931dba144ff",
     "question": "Brendon Urie wrote new perspective after firing which bassist?",
+    "answer": "Brent Wilson was fired",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "New Perspective (song)",
@@ -10137,9 +10139,7 @@
           " at the Disco, six touring members and twenty-six session members."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae27b535542996483e649b6",
@@ -11279,9 +11279,11 @@
     }
   },
   {
-    "_id": "5adfcb5455429906c02daa48",
-    "answer": "Father Dougal McGuire",
+    "id": "5adfcb5455429906c02daa48",
     "question": "What character in \"Father Ted\" was played by an actor who starred in Death in Paradise?",
+    "answer": "Father Dougal McGuire",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Death in Paradise (TV series)",
@@ -11375,14 +11377,14 @@
           "\"Good Luck, Father Ted\" is the first episode to be aired of the Channel 4 sitcom \"Father Ted\"."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5a8008b95542992097ad2fcf",
-    "answer": "Sleeping Beauty",
+    "id": "5a8008b95542992097ad2fcf",
     "question": "The Light Princess was inspired by \"what\" literary tale published by Charles Perrault in 1697?",
+    "answer": "Sleeping Beauty",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "The Light Princess",
@@ -11486,14 +11488,14 @@
           " The earliest known version of the story is found in the narrative \"Perceforest\", composed between 1330 and 1344 and first printed in 1528."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5abc6fba554299700f9d78c7",
-    "answer": "Flushed Away",
+    "id": "5abc6fba554299700f9d78c7",
     "question": "Christopher \"Chris\" Fairbank provided voice talent for which 2006 British-American computer-animated action-adventure comedy film directed by David Bowers and Sam Fell?",
+    "answer": "Flushed Away",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Christopher Fairbank",
@@ -11602,9 +11604,7 @@
           " The film grossed $86,947,965 on a $60 million budget."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a7f57a45542992097ad2f29",
@@ -12220,9 +12220,11 @@
     }
   },
   {
-    "_id": "5a85d4395542996432c570f5",
-    "answer": "Troy, Montana",
+    "id": "5a85d4395542996432c570f5",
     "question": "What city, located in Lincoln County, Montana, United States, is Vegepet based in?",
+    "answer": "Troy, Montana",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Vegepet",
@@ -12317,9 +12319,7 @@
           " The city is the county seat of Lincoln County, and is the only legally incorporated municipality wholly within the rural county."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac02b325542992a796decb9",
@@ -12630,9 +12630,11 @@
     }
   },
   {
-    "_id": "5a84f5195542994c784dda9d",
-    "answer": "Israeli Ambassador",
+    "id": "5a84f5195542994c784dda9d",
     "question": "What is the current position held by the Nathan Sharansky's co-author of the book The Case for Democracy?",
+    "answer": "Israeli Ambassador",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "The Case for Democracy",
@@ -12730,9 +12732,7 @@
           " Additionally, Moustapha is the National President of the National Alliance for Democracy and Progress (ANDP), a small party that supports President Paul Biya."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a7302b75542991f9a20c5fd",
@@ -13289,9 +13289,11 @@
     }
   },
   {
-    "_id": "5ab90a2055429916710eb0ea",
-    "answer": "Philadelphia",
+    "id": "5ab90a2055429916710eb0ea",
     "question": "Daniel Walcott was selected by the New York Rangers in the 5th round of a NHL draft that was held in what city?",
+    "answer": "Philadelphia",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Daniel Walcott",
@@ -13386,14 +13388,14 @@
           " He was selected by the New York Rangers in the 5th round (139th overall) of the 2001 NHL Entry Draft."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ae7a5f05542993210983ece",
-    "answer": "fourth",
+    "id": "5ae7a5f05542993210983ece",
     "question": "This कसबा पेठ विधानसभा मतदारसंघ is an example of a language that ranks what in the number of native speakers in India?",
+    "answer": "fourth",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Kasba Peth (Vidhan Sabha constituency)",
@@ -13489,9 +13491,7 @@
           "Vandre East Vidhan Sabha constituency (Marathi: वांद्रे पूर्व विधानसभा मतदारसंघ ) is one of the 288 Vidhan Sabha constituencies of Maharashtra state in western India."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac0fd56554299012d1db679",
@@ -13583,9 +13583,11 @@
     }
   },
   {
-    "_id": "5abdf8c45542993f32c2a072",
-    "answer": "Kona coast",
+    "id": "5abdf8c45542993f32c2a072",
     "question": "The Death of Cook depicts the death of James Cook at a bay on what coast?",
+    "answer": "Kona coast",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Death of Cook",
@@ -13682,9 +13684,7 @@
           " It is a point of conjecture among historians whether James Cook, the famous navigator, ever lived in the house, but almost certainly he visited his parents at the house."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a7e6f295542991319bc94b1",
@@ -14217,9 +14217,11 @@
     }
   },
   {
-    "_id": "5a8b8b3a5542995d1e6f13e5",
-    "answer": "brothers",
+    "id": "5a8b8b3a5542995d1e6f13e5",
     "question": "What is the relationship between the singers on the album Tales of Old Grand Daddy?",
+    "answer": "brothers",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Tales of Old Grand Daddy",
@@ -14307,9 +14309,7 @@
           " Guest appearances by Action Bronson, Cormega, Roc Marciano, Mic Geronimo, Busta Rhymes, Grand Daddy I.U., Tragedy Khadafi, Lil' Fame of M.O.P, & Saigon."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac29aa655429967731025b2",
@@ -14639,9 +14639,11 @@
     }
   },
   {
-    "_id": "5ab5f854554299637185c64e",
-    "answer": "Pakistani",
+    "id": "5ab5f854554299637185c64e",
     "question": "What country do both Adnan Akmal and Kamran Akmal represent in cricket?",
+    "answer": "Pakistani",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Adnan Akmal",
@@ -14751,9 +14753,7 @@
           " The tournament was won by Rising Stars Chuis who defeated Ruwenzori Warriors by 9 wickets in the final."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a8b84875542995d1e6f13d7",
@@ -15734,9 +15734,11 @@
     }
   },
   {
-    "_id": "5ae763aa5542995703ce8c09",
-    "answer": "William Dwight Schultz",
+    "id": "5ae763aa5542995703ce8c09",
     "question": "Who voices Chef Mung Daal in the American animated television series created by C. H. Greenblatt?",
+    "answer": "William Dwight Schultz",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Dwight Schultz",
@@ -15845,9 +15847,7 @@
           " The song \"Sweet Victory\" by David Glen Eisley was featured in the episode and was later released on the album \"\" in 2005."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a8f5273554299458435d5b1",
@@ -16140,9 +16140,11 @@
     }
   },
   {
-    "_id": "5ab29842554299194fa93420",
-    "answer": "La mamma morta",
+    "id": "5ab29842554299194fa93420",
     "question": "What is the name of the third act in a play where a character named Carlo Gérard is partly based on a revolutionary figure?",
+    "answer": "La mamma morta",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "La mamma morta",
@@ -16249,14 +16251,14 @@
           " The play was not performed in its entirety until 1915, when the Travelling Repertory Company played it at the Lyceum Theatre, Edinburgh."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5abcffc2554299700f9d7951",
-    "answer": "Citgo",
+    "id": "5abcffc2554299700f9d7951",
     "question": "What is the name of the company in Independent Hill, Virginia that is also headquartered in Houston Texas?",
+    "answer": "Citgo",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Independent Hill, Virginia",
@@ -16365,9 +16367,7 @@
           " A GOD-called preacher of the original faith and order of the Baptists in America, Elder Smoot, whose followers were known locally as \"Smootites,\" engaged in a heated rivalry over doctrine and practice as set forth in the Bible(KJV) with the reverend Thomas D.D. Clark, whose Union Baptist Church was located across the road from the Quantico Baptist Church in the village of Independent Hill."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adbfaa655429947ff173888",
@@ -17597,9 +17597,11 @@
     }
   },
   {
-    "_id": "5ae4c96355429913cc204506",
-    "answer": "400 members",
+    "id": "5ae4c96355429913cc204506",
     "question": "How many members does the lower house of the state legislature in which Samuel Leavitt served have?",
+    "answer": "400 members",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Samuel Leavitt",
@@ -17704,9 +17706,7 @@
           " Fondly remembered as \"Old Uncle Dennis\" or \"Father Pennington,\" he was known for his common sense and strong character and became one of Harrison County's most influential citizens."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ab94cf0554299743d22eade",
@@ -18608,9 +18608,11 @@
     }
   },
   {
-    "_id": "5ae68fcb5542992ae0d1635b",
-    "answer": "Bay Ridge, Brooklyn",
+    "id": "5ae68fcb5542992ae0d1635b",
     "question": "\"Ew!\" is a song by a television host born where?",
+    "answer": "Bay Ridge, Brooklyn",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Ew!",
@@ -18718,9 +18720,7 @@
           " Puplava's website at financialsense.com was named a \"supersite for alternative investing\" by The Globe and Mail, Canada's largest-circulation national newspaper."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae0361155429925eb1afc2c",
@@ -18894,9 +18894,11 @@
     }
   },
   {
-    "_id": "5ae528ed5542993aec5ec16e",
-    "answer": "Revengers Tragedy",
+    "id": "5ae528ed5542993aec5ec16e",
     "question": "What is the name of the film directed by Alex Cox  adapted from a 1606 play starring Diana Quick as the Dutchess?",
+    "answer": "Revengers Tragedy",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Revengers Tragedy",
@@ -18992,9 +18994,7 @@
           " It features then-little-known Ben Kingsley and Tim Pigott-Smith in small roles."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a8ec55f5542995a26add50c",
@@ -19287,9 +19287,11 @@
     }
   },
   {
-    "_id": "5a8887a055429938390d3f72",
-    "answer": "Rocky Boy's Indian Reservation",
+    "id": "5a8887a055429938390d3f72",
     "question": "Which reservation is located in Hill and Chouteau and named after the principal leader of the Montana Chippewa-Cree?",
+    "answer": "Rocky Boy's Indian Reservation",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Rocky Boy (Chippewa leader)",
@@ -19391,14 +19393,14 @@
           " The college retention rate is 47 percent and the graduation rate is 20 percent."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ae5bcbd55429960a22e0324",
-    "answer": "in 1902",
+    "id": "5ae5bcbd55429960a22e0324",
     "question": "When is the football club which Stan Spinks played for founded",
+    "answer": "in 1902",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Stan Spinks",
@@ -19524,9 +19526,7 @@
           " The club's Latin motto is \"spectemur agendo\", the English translation being \"By our deeds let us be known\"."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adca5eb5542994d58a2f693",
@@ -19854,9 +19854,11 @@
     }
   },
   {
-    "_id": "5a7905f555429974737f7947",
-    "answer": "second largest",
+    "id": "5a7905f555429974737f7947",
     "question": "Is Driss Lachgar's birthplace the largest or the second largest city in Morocco?",
+    "answer": "second largest",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Driss Lachgar",
@@ -19950,9 +19952,7 @@
           " The capital and largest city is Oujda, and the second largest city is Nador."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a72df275542992359bc31b3",
@@ -20173,9 +20173,11 @@
     }
   },
   {
-    "_id": "5ae5aba0554299546bf82f17",
-    "answer": "Teen Titans Go!",
+    "id": "5ae5aba0554299546bf82f17",
     "question": "Which of Tara Strong major voice role in animated series is an American animated television series based on the DC Comics fictional superhero team, the \"Teen Titans\"?",
+    "answer": "Teen Titans Go!",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Tara Strong",
@@ -20282,9 +20284,7 @@
           " The series follows the adventures of a team of crime-fighting teenaged superheroes, consisting of the leader Robin (voiced by Scott Menville), foreign alien princess Starfire (voiced by Hynden Walch), the technological genius Cyborg (voiced by Khary Payton), the dark sorceress Raven (voiced by Tara Strong), and the green shapeshifter Beast Boy (voiced by Greg Cipes)."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a8a2e465542996c9b8d5e32",
@@ -20479,9 +20479,11 @@
     }
   },
   {
-    "_id": "5abccda855429965836004a4",
-    "answer": "Saturdays at 11:30 am ET",
+    "id": "5abccda855429965836004a4",
     "question": "What time did a Fox News show formally hosted by the author of \"The Swamp: Washington's Murky Pool of Corruption and Cronyism and How Trump Can Drain It\" air?",
+    "answer": "Saturdays at 11:30 am ET",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Cashin' In",
@@ -20595,9 +20597,7 @@
           " Fox News Talk carries a combination of Fox News syndicated radio programming, Fox News Channel show audio simulcasts, and Fox newscasts at the top of the hour."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae69df255429908198fa664",
@@ -21510,9 +21510,11 @@
     }
   },
   {
-    "_id": "5ae8164d5542994a481bbeb6",
-    "answer": "March 19, 2017",
+    "id": "5ae8164d5542994a481bbeb6",
     "question": "Emily Beecham is best known for her role in a televsion series whose second season premiered on what date?",
+    "answer": "March 19, 2017",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Emily Beecham",
@@ -21647,14 +21649,14 @@
           " The third season premiered on January 4, 2017 with two new main cast members, Samantha Ortiz and Tanya Scott who replaced Emily Fernandez and Bri Barlup who moved to Dallas, and are currently starring in \"\""
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ae497f15542995ad6573db8",
-    "answer": "Distillery",
+    "id": "5ae497f15542995ad6573db8",
     "question": "What NIFL Premier Intermediate League team did Sean Connor play for?",
+    "answer": "Distillery",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Sean Connor",
@@ -21752,9 +21754,7 @@
           " The club, founded in 1910, a founder member of the Irish League B Division, is affiliated to Queen's University Belfast, and plays home matches at the newly built Arena at the Queen's University sports grounds, Upper Malone, Belfast - also known as \"the Dub\"."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5abd0803554299700f9d7979",
@@ -21938,9 +21938,11 @@
     }
   },
   {
-    "_id": "5adc99d95542994ed6169baa",
-    "answer": "March 31, 1944",
+    "id": "5adc99d95542994ed6169baa",
     "question": "When is the American politician and attorney which Thomas J. Connolly an for Governor of Maine in 1998 against born ",
+    "answer": "March 31, 1944",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Thomas J. Connolly",
@@ -22046,14 +22048,14 @@
           " He previously served for ten years as State's Attorney of Chittenden County, the most populous county in Vermont."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5add3aaa5542992ae4cec500",
-    "answer": "Zaire",
+    "id": "5add3aaa5542992ae4cec500",
     "question": "What was the name of the country ran by the president who maintained the mercenary unit, White Legion? ",
+    "answer": "Zaire",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "White Legion (Zaire)",
@@ -22145,9 +22147,7 @@
           " He also served as Chairperson of the Organisation of African Unity in 1967–1968."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a7c67c15542990527d55498",
@@ -22538,9 +22538,11 @@
     }
   },
   {
-    "_id": "5ab235ed5542993be8fa98c8",
-    "answer": "Italian",
+    "id": "5ab235ed5542993be8fa98c8",
     "question": "What is the nationality of the composer of the Opera \"Iphigénie en Aulide\" ?",
+    "answer": "Italian",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "François-Louis Gand Le Bland Du Roullet",
@@ -22653,9 +22655,7 @@
           " He also co-wrote (with Louis-Théodore de Tschudi) the libretto for Salieri's opera \"Les Danaïdes\"."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac02880554299012d1db5c0",
@@ -22942,9 +22942,11 @@
     }
   },
   {
-    "_id": "5ae2c4b8554299495565db31",
-    "answer": "Buffalo",
+    "id": "5ae2c4b8554299495565db31",
     "question": "What New York city is 60 miles northwest of the Glen Iris Inn?",
+    "answer": "Buffalo",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Glen Iris Inn",
@@ -23048,9 +23050,7 @@
           " William Floyd students attend five elementary schools, two middle schools, and a senior high school."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae724ec5542995703ce8bd8",
@@ -23140,9 +23140,11 @@
     }
   },
   {
-    "_id": "5ae454355542996836b02c77",
-    "answer": "4 albums",
+    "id": "5ae454355542996836b02c77",
     "question": "How many albums have been released by the same band that released the \"Trance\" EP?",
+    "answer": "4 albums",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Trance (EP)",
@@ -23245,9 +23247,7 @@
           " His 2017 EP, \"Daydream Station\" (his first spoken-word project), consisted of original sketch comedy bits from the show."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a7c5de155429935c91b5179",
@@ -23436,9 +23436,11 @@
     }
   },
   {
-    "_id": "5adccdd55542992c1e3a2408",
-    "answer": "Waimea Bay",
+    "id": "5adccdd55542992c1e3a2408",
     "question": "Meaning \"reddish water\" in Hawaiian, which location was Butch Van Artsdalen known for surfing 25-foot waves at?",
+    "answer": "Waimea Bay",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Butch Van Artsdalen",
@@ -23541,14 +23543,14 @@
           " Lake surfers enjoy water that is fresh (\"sweet\" as opposed to salty) and do not have to worry about the dangers from marine life (e.g. sharks, jellyfish, etc.) that ocean surfers may have to contend with."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5a8249b85542990a1d231f8f",
-    "answer": "politician",
+    "id": "5a8249b85542990a1d231f8f",
     "question": "What title did the actor who worked with Sivaji Ganesan in a 1970 drama film other than actor?",
+    "answer": "politician",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Khilona (1970 film)",
@@ -23665,9 +23667,7 @@
           " The film was also remade in Malayalam as \"Amrithavaahini\"."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5abcfd7e5542993a06baf9df",
@@ -23946,9 +23946,11 @@
     }
   },
   {
-    "_id": "5a7746cf5542994aec3b7263",
-    "answer": "The Community of St Mary the Virgin (CSMV)",
+    "id": "5a7746cf5542994aec3b7263",
     "question": "St Mary's School in Pune, India was run for over 100 years by what organization started by the Reverend William John Butler?",
+    "answer": "The Community of St Mary the Virgin (CSMV)",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "St. Mary's School, Pune",
@@ -24078,9 +24080,7 @@
           " Known prior to his elevation to the peerage as Lord John Butler, he was created Earl of Gowran in 1676."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a730abe5542994cef4bc42f",
@@ -24206,9 +24206,11 @@
     }
   },
   {
-    "_id": "5abf11d45542997719eab660",
-    "answer": "Canada",
+    "id": "5abf11d45542997719eab660",
     "question": "Driven To Perform has a sponsor that includes the electronics store chain from what country?",
+    "answer": "Canada",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Driven To Perform",
@@ -24317,9 +24319,7 @@
           " The company's national support office is currently located in North Geelong, Victoria but will move its headquarters to Williams Landing at the end of 2018."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a81cf64554299676cceb0ed",
@@ -24397,9 +24397,11 @@
     }
   },
   {
-    "_id": "5abc030e554299642a094bdc",
-    "answer": "1945 to 1951",
+    "id": "5abc030e554299642a094bdc",
     "question": "The Distribution of Industry act was passed by a man who was prime minister when? ",
+    "answer": "1945 to 1951",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Distribution of Industry Act 1950",
@@ -24505,14 +24507,14 @@
           "The Industry Act 1975 (c. 68) was an Act of the Parliament of the United Kingdom passed by Harold Wilson's Labour government."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ac24cea55429951e9e6853a",
-    "answer": "Kate Millett",
+    "id": "5ac24cea55429951e9e6853a",
     "question": "Which Oxford University graduate did Midge Mackenzie interview in \"Women Talking\"?",
+    "answer": "Kate Millett",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Midge Mackenzie",
@@ -24618,9 +24620,7 @@
           " She has served as a Vice President of the U.S. Olympians Association and as athletes' representative to the Board of USRowing."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a808b57554299485f598651",
@@ -24800,9 +24800,11 @@
     }
   },
   {
-    "_id": "5a8ba9d255429971feec4759",
-    "answer": "Operation Iceberg",
+    "id": "5a8ba9d255429971feec4759",
     "question": "Camp Courtney was named after the Major killed in action at the battle codenamed what?",
+    "answer": "Operation Iceberg",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Camp Courtney",
@@ -24910,9 +24912,7 @@
           "The Battle of Camp Abubakar, (codenamed Operation Terminal Velocity) was the final phase of the 2000 Philippine campaign against the Moro Islamic Liberation Front which resulted in the capture of Camp Abubakar al Siddique, stronghold of the Moro Islamic Liberation Front and its largest settlement, and seat of its Shariah-based government."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5adc02445542994650320c4e",
@@ -25166,9 +25166,11 @@
     }
   },
   {
-    "_id": "5ae363ff5542992f92d822bc",
-    "answer": "Schutzstaffel",
+    "id": "5ae363ff5542992f92d822bc",
     "question": "Erwin Lambert was a member of which paramilitary organization under Hitler?",
+    "answer": "Schutzstaffel",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Erwin Lambert",
@@ -25273,14 +25275,14 @@
           " The murders of SA leaders were also intended to improve the image of the Hitler government with a German public that was increasingly critical of thuggish Brownshirt tactics."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5a83172455429954d2e2ec14",
-    "answer": "Sæward",
+    "id": "5a83172455429954d2e2ec14",
     "question": "Whose brother was a king of the East-Saxons?",
+    "answer": "Sæward",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Sæward of Essex",
@@ -25402,9 +25404,7 @@
           ", was a king of the East-Saxons."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5abc184a5542993a06baf863",
@@ -26658,9 +26658,11 @@
     }
   },
   {
-    "_id": "5a8af94455429971feec45b6",
-    "answer": "since 2007",
+    "id": "5a8af94455429971feec45b6",
     "question": "Jon S. Cardin is the nephew of a senator who has been in office since when ?",
+    "answer": "since 2007",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Jon S. Cardin",
@@ -26758,14 +26760,14 @@
           " Calvo chose Senator Ray Tenorio as his running mate for Lieutenant Governor of Guam."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5ae3376455429928c4239688",
-    "answer": "Miami Dolphins",
+    "id": "5ae3376455429928c4239688",
     "question": "What NFL Team, undefeated in 1972, had on their staff the coach of the 2004 Florida Atlantic Owls football team?",
+    "answer": "Miami Dolphins",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "2004 Florida Atlantic Owls football team",
@@ -26873,14 +26875,14 @@
           " He is also famous for recruiting Joe Namath to Alabama for Bear Bryant in 1961."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
-    "_id": "5abb73425542996cc5e49ff5",
-    "answer": "SAVE",
+    "id": "5abb73425542996cc5e49ff5",
     "question": "What's the NASDAQ ticker code for Spirit Airlines, based at Detroit Metro Airport among others and an ultra low cost carrier?",
+    "answer": "SAVE",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Spirit Airlines",
@@ -26982,9 +26984,7 @@
           " The Federal Aviation Administration (FAA) National Plan of Integrated Airport Systems for 2017–2021 categorized it as a large hub primary commercial service facility."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a85eed75542996432c5713b",
@@ -28056,9 +28056,11 @@
     }
   },
   {
-    "_id": "5ae64ba755429929b0807b25",
-    "answer": "Albany Great Danes baseball team",
+    "id": "5ae64ba755429929b0807b25",
     "question": "What team that is a member of the America East Conference played in the championship game in 2009?",
+    "answer": "Albany Great Danes baseball team",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "2009 America East Conference Baseball Tournament",
@@ -28167,9 +28169,7 @@
           " The team went on to win the Coral Gables Regional and the Baton Rouge Super Regional, becoming the first ever team from the America East Conference to advance to the College World Series."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5a71095e5542994082a3e4f3",
@@ -28266,9 +28266,11 @@
     }
   },
   {
-    "_id": "5a7a030c5542996a35c17077",
-    "answer": "State Street",
+    "id": "5a7a030c5542996a35c17077",
     "question": "J.B. Scotts located on this 11 mile stretch in Albany New York and is also known by this name in Schenectady County?",
+    "answer": "State Street",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "J.B. Scott's",
@@ -28380,9 +28382,7 @@
           " The HUB also takes in many High School students who either get in fights or have alcohol/drug problems."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ae5dae2554299546bf82fa4",
@@ -28482,9 +28482,11 @@
     }
   },
   {
-    "_id": "5ab6c1da554299710c8d1f4c",
-    "answer": "Finland's northernmost province, Lapland",
+    "id": "5ab6c1da554299710c8d1f4c",
     "question": "What province is the city where Matts (Matti) Wiktor Hoikka was a blacksmith and politician?",
+    "answer": "Finland's northernmost province, Lapland",
+    "type": "bridge",
+    "level": "hard",
     "supporting_facts": [
       [
         "Matti Hoikka",
@@ -28579,9 +28581,7 @@
           " He was a member of the Parliament of Finland from 1908 to 1917, representing the Agrarian League."
         ]
       ]
-    ],
-    "type": "bridge",
-    "level": "hard"
+    ]
   },
   {
     "id": "5ac0d981554299012d1db646",
