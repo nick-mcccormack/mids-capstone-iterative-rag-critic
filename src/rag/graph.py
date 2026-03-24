@@ -16,6 +16,7 @@ from src.rag.llm import (
 from src.rag.reranker import run_reranking
 from src.rag.retriever import run_retrieval
 from src.utils.helpers import (
+	_strip_doc_id_suffix,
 	_dedupe_contexts,
 	_get_relevant_contexts,
 	_missing_placeholders,
@@ -24,13 +25,60 @@ from src.utils.helpers import (
 
 
 class GraphState(TypedDict, total=False):
-	"""State carried through the LangGraph pipeline."""
+	"""State carried through the LangGraph pipeline.
+
+	Attributes
+	----------
+	original_query_id : str
+		Example identifier.
+	original_query : str
+		Original question text.
+	gold_answer : Optional[str]
+		Ground-truth answer if available.
+	config : Any
+		Pipeline configuration object.
+	current_answer : str
+		Current canonical answer text.
+	initial_answer : str
+		Canonical answer from the initial answer-generation step.
+	final_answer : str
+		Canonical answer selected at pipeline completion.
+	input_tokens : int
+		Accumulated input token usage across LLM calls.
+	output_tokens : int
+		Accumulated output token usage across LLM calls.
+	total_cost : float
+		Accumulated model cost across LLM calls.
+	relevant_contexts : List[Dict[str, Any]]
+		Contexts currently considered relevant.
+	final_contexts : List[Dict[str, Any]]
+		Contexts used for final evaluation/output.
+	evidence_store_contexts : List[Dict[str, Any]]
+		All accumulated contexts gathered during execution.
+	critic_output : Dict[str, Any]
+		Latest critic output object.
+	planner_output : Dict[str, Any]
+		Latest planner output object.
+	round_idx : int
+		Current iterative round index.
+	bindings : Dict[str, Any]
+		Resolved variable bindings from executed steps.
+	stop_due_to_duplicate_plan : bool
+		Whether execution should stop because a failed plan repeated.
+	execution_trace : Dict[str, Any]
+		Structured trace of retrieval, planning, execution, and answering.
+	initial_ragas_metrics : Dict[str, Any]
+		RAGAS metrics for the initial answer.
+	final_ragas_metrics : Dict[str, Any]
+		RAGAS metrics for the final answer.
+	"""
 
 	original_query_id: str
 	original_query: str
 	gold_answer: Optional[str]
 	config: Any
 	current_answer: str
+	initial_answer: str
 	final_answer: str
 	input_tokens: int
 	output_tokens: int
@@ -53,7 +101,7 @@ def _maybe_rerank(
 	query: str,
 	contexts: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-	"""Optionally rerank contexts.
+	"""Optionally rerank retrieved contexts.
 
 	Parameters
 	----------
@@ -61,19 +109,24 @@ def _maybe_rerank(
 		Pipeline config.
 	query : str
 		Query string.
-	contexts : list[dict[str, Any]]
+	contexts : List[Dict[str, Any]]
 		Retrieved contexts.
 
 	Returns
 	-------
-	list[dict[str, Any]]
-		Selected contexts.
+	List[Dict[str, Any]]
+		Selected contexts after optional reranking.
 	"""
 	if not contexts:
 		return []
+
 	selected = contexts
 	if config.use_rerank:
-		selected = run_reranking(config=config, query=query, candidates=contexts)
+		selected = run_reranking(
+			config=config,
+			query=query,
+			candidates=contexts,
+		)
 	return selected
 
 
@@ -87,13 +140,13 @@ def _update_llm_meta_metrics(
 	----------
 	state : GraphState
 		Current graph state.
-	resp : dict[str, Any]
+	resp : Dict[str, Any]
 		LLM response payload.
 
 	Returns
 	-------
 	GraphState
-		Updated state.
+		Updated state with accumulated token/cost metrics.
 	"""
 	state["input_tokens"] += resp.get("meta", {}).get("input_tokens", 0)
 	state["output_tokens"] += resp.get("meta", {}).get("output_tokens", 0)
@@ -101,7 +154,11 @@ def _update_llm_meta_metrics(
 	return state
 
 
-def _append_trace_list(state: GraphState, key: str, item: Dict[str, Any]) -> None:
+def _append_trace_list(
+	state: GraphState,
+	key: str,
+	item: Dict[str, Any],
+) -> None:
 	"""Append an item to a list inside the execution trace.
 
 	Parameters
@@ -110,8 +167,13 @@ def _append_trace_list(state: GraphState, key: str, item: Dict[str, Any]) -> Non
 		Current graph state.
 	key : str
 		Execution trace key.
-	item : dict[str, Any]
+	item : Dict[str, Any]
 		Item to append.
+
+	Returns
+	-------
+	None
+		This function mutates ``state`` in place.
 	"""
 	trace = state.setdefault("execution_trace", {})
 	trace.setdefault(key, [])
@@ -133,14 +195,14 @@ def _prepare_initial_state(
 	original_query : str
 		Question text.
 	gold_answer : Optional[str]
-		Ground truth answer.
+		Ground-truth answer.
 	config : Any
 		Pipeline config.
 
 	Returns
 	-------
 	GraphState
-		Initialized state.
+		Initialized graph state.
 	"""
 	return GraphState(
 		original_query_id=original_query_id,
@@ -148,6 +210,7 @@ def _prepare_initial_state(
 		gold_answer=gold_answer,
 		config=config,
 		current_answer="",
+		initial_answer="",
 		final_answer="",
 		input_tokens=0,
 		output_tokens=0,
@@ -217,15 +280,17 @@ def _get_failed_step_history(state: GraphState) -> List[Dict[str, Any]]:
 
 	Returns
 	-------
-	list[dict[str, Any]]
+	List[Dict[str, Any]]
 		Recent failed step records.
 	"""
 	items = state.get("execution_trace", {}).get("step_executions", []) or []
 	failed: List[Dict[str, Any]] = []
+
 	for item in items:
 		status = str(item.get("status") or "")
 		if status not in {"failed_bind", "skipped_missing_bindings"}:
 			continue
+
 		failed.append(
 			{
 				"step_id": item.get("step_id"),
@@ -233,9 +298,11 @@ def _get_failed_step_history(state: GraphState) -> List[Dict[str, Any]]:
 				"query_template": item.get("query_template"),
 				"rendered_query": item.get("rendered_query"),
 				"missing_bindings": item.get("missing_bindings", []),
+				"bind_variable": item.get("bind_variable"),
 				"answer": (item.get("step_result") or {}).get("answer"),
 			}
 		)
+
 	return failed[-10:]
 
 
@@ -244,13 +311,13 @@ def _canonicalize_plan(plan_obj: Dict[str, Any]) -> str:
 
 	Parameters
 	----------
-	plan_obj : dict[str, Any]
+	plan_obj : Dict[str, Any]
 		Planner output object.
 
 	Returns
 	-------
 	str
-		Canonicalized string representation.
+		Canonicalized string representation of the plan.
 	"""
 	plan = plan_obj.get("plan") or []
 	return json.dumps(plan, ensure_ascii=False, sort_keys=True)
@@ -271,9 +338,11 @@ def _node_initial_retrieve(state: GraphState) -> GraphState:
 	"""
 	config = state["config"]
 	query = state["original_query"]
+
 	contexts = run_retrieval(config=config, query_idx=0, query=query)
 	selected = _maybe_rerank(config=config, query=query, contexts=contexts)
 	unique_contexts = _dedupe_contexts(selected)
+
 	state["evidence_store_contexts"] = unique_contexts
 	state["relevant_contexts"] = unique_contexts
 	state["execution_trace"]["initial_retrieval"] = {
@@ -302,8 +371,12 @@ def _node_initial_answer(state: GraphState) -> GraphState:
 		contexts=state.get("evidence_store_contexts", []),
 	)
 	state = _update_llm_meta_metrics(state, resp)
-	state["current_answer"] = resp["text"]
-	state["execution_trace"]["initial_answer"] = resp["text"]
+
+	initial_answer = _strip_doc_id_suffix(resp["text"])
+	state["current_answer"] = initial_answer
+	state["initial_answer"] = initial_answer
+	state["execution_trace"]["initial_answer"] = initial_answer
+
 	return state
 
 
@@ -364,6 +437,7 @@ def _route_after_critic(state: GraphState) -> str:
 	"""
 	outcome = state.get("critic_output", {}).get("outcome")
 	config = state["config"]
+
 	if outcome == "pass":
 		return "finalize"
 	if not bool(getattr(config, "iterative", True)):
@@ -393,6 +467,7 @@ def _node_planner(state: GraphState) -> GraphState:
 		failed_step_history=failed_step_history,
 	)
 	state = _update_llm_meta_metrics(state, resp)
+
 	planner_output = resp.get("object", {})
 	planner_signature = _canonicalize_plan(planner_output)
 	failed_signatures = {
@@ -400,6 +475,7 @@ def _node_planner(state: GraphState) -> GraphState:
 		for item in state.get("execution_trace", {}).get("plans", [])
 		if bool(item.get("had_failed_bind"))
 	}
+
 	if planner_signature and planner_signature in failed_signatures:
 		state["stop_due_to_duplicate_plan"] = True
 		planner_output = {"outcome": "decompose", "plan": []}
@@ -486,6 +562,10 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 				continue
 
 			query_template = str(step.get("query_template", ""))
+			bind_variable = step.get("bind_variable")
+			if bind_variable is not None:
+				bind_variable = str(bind_variable)
+
 			missing = _missing_placeholders(query_template, bindings)
 			if missing:
 				failed_steps.add(step_id)
@@ -496,6 +576,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 						"step_id": step_id,
 						"status": "skipped_missing_bindings",
 						"query_template": query_template,
+						"bind_variable": bind_variable,
 						"missing_bindings": missing,
 					},
 				)
@@ -524,24 +605,30 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 			step_resp = execute_step(
 				config=config,
 				step_query=rendered_query,
-				bind_variables=[str(x) for x in (step.get("bind") or [])],
+				bind_variable=bind_variable,
 				contexts=step_contexts,
 			)
 			state = _update_llm_meta_metrics(state, step_resp)
 
 			step_result = step_resp.get("object", {})
 			resolved_any = False
-			bindings_out = step_result.get("bindings") or {}
+			binding_out = step_result.get("binding")
 
-			for var_name, payload in bindings_out.items():
-				value = payload.get("value") if isinstance(payload, dict) else payload
-				if value not in (None, ""):
-					bindings[str(var_name)] = value
+			if isinstance(binding_out, dict):
+				value = binding_out.get("value")
+				variable = binding_out.get("variable")
+
+				if (
+					bind_variable is not None
+					and variable == bind_variable
+					and value not in (None, "")
+				):
+					bindings[bind_variable] = value
 					resolved_any = True
 
 			status = (
 				"completed"
-				if resolved_any or not step.get("bind")
+				if resolved_any or bind_variable is None
 				else "failed_bind"
 			)
 
@@ -553,6 +640,7 @@ def _node_execute_plan(state: GraphState) -> GraphState:
 					"status": status,
 					"query_template": query_template,
 					"rendered_query": rendered_query,
+					"bind_variable": bind_variable,
 					"step": step,
 					"step_contexts": step_contexts,
 					"step_result": step_result,
@@ -620,9 +708,12 @@ def _node_answer_from_evidence(state: GraphState) -> GraphState:
 		step_summaries=step_summaries,
 	)
 	state = _update_llm_meta_metrics(state, resp)
-	state["current_answer"] = resp["text"]
+
+	final_answer = _strip_doc_id_suffix(resp["text"])
+	state["current_answer"] = final_answer
+	state["final_answer"] = final_answer
 	state["execution_trace"]["final_answer_call"] = {
-		"answer": state["current_answer"],
+		"answer": final_answer,
 		"contexts": contexts,
 		"step_summaries": step_summaries,
 	}
@@ -651,6 +742,12 @@ def _node_finalize(state: GraphState) -> GraphState:
 	if not state.get("final_contexts"):
 		state["final_contexts"] = list(state.get("relevant_contexts", []))
 
+	if not state.get("initial_answer"):
+		state["initial_answer"] = state.get("execution_trace", {}).get(
+			"initial_answer",
+			"",
+		)
+
 	if not state.get("final_ragas_metrics"):
 		state["final_ragas_metrics"] = evaluate_answer(
 			config=config,
@@ -663,15 +760,12 @@ def _node_finalize(state: GraphState) -> GraphState:
 	final_metrics = state.get("final_ragas_metrics", {}) or {}
 	final_safe_metrics = {
 		f"final_{key}": value
-		for key, value in _sanitize_metrics_for_mlflow(
-			final_metrics,
-		).items()
+		for key, value in _sanitize_metrics_for_mlflow(final_metrics).items()
 	}
 
 	critic_rounds = state.get("execution_trace", {}).get("critic_rounds", [])
 
 	if iterative and len(critic_rounds) > 1:
-		initial_answer = state.get("execution_trace", {}).get("initial_answer")
 		initial_contexts = state.get("execution_trace", {}).get(
 			"initial_retrieval",
 			{},
@@ -680,7 +774,7 @@ def _node_finalize(state: GraphState) -> GraphState:
 		state["initial_ragas_metrics"] = evaluate_answer(
 			config=config,
 			query=state["original_query"],
-			model_answer=initial_answer,
+			model_answer=state["initial_answer"],
 			gold_answer=state.get("gold_answer"),
 			contexts=initial_contexts,
 		)
@@ -690,9 +784,7 @@ def _node_finalize(state: GraphState) -> GraphState:
 	initial_metrics = state.get("initial_ragas_metrics", {}) or {}
 	initial_safe_metrics = {
 		f"initial_{key}": value
-		for key, value in _sanitize_metrics_for_mlflow(
-			initial_metrics,
-		).items()
+		for key, value in _sanitize_metrics_for_mlflow(initial_metrics).items()
 	}
 
 	if bool(getattr(config, "use_mlflow", True)) and mlflow.active_run():
@@ -705,11 +797,9 @@ def _node_finalize(state: GraphState) -> GraphState:
 
 		mlflow.log_metrics(
 			{
-				"num_final_contexts": float(
-					len(state.get("final_contexts", [])),
-				),
+				"num_final_contexts": float(len(state.get("final_contexts", []))),
 				"num_evidence_contexts": float(
-					len(state.get("evidence_store_contexts", [])),
+					len(state.get("evidence_store_contexts", []))
 				),
 			}
 		)
@@ -729,6 +819,7 @@ def _node_finalize(state: GraphState) -> GraphState:
 				"original_query_id": state["original_query_id"],
 				"original_query": state["original_query"],
 				"gold_answer": state.get("gold_answer"),
+				"initial_answer": state.get("initial_answer"),
 				"final_answer": state.get("final_answer"),
 				"final_contexts": state.get("final_contexts", []),
 				"evidence_store_contexts": state.get(
@@ -817,13 +908,13 @@ def run_graph(
 	original_query : str
 		Question text.
 	gold_answer : Optional[str]
-		Ground truth answer.
+		Ground-truth answer.
 	config : Any
 		Pipeline config.
 
 	Returns
 	-------
-	dict[str, Any]
+	Dict[str, Any]
 		Final structured output.
 	"""
 	iterative = bool(getattr(config, "iterative", True))
@@ -837,18 +928,26 @@ def run_graph(
 		config=config,
 	)
 	final_state = _COMPILED_GRAPHS[iterative].invoke(initial_state)
+
 	return {
 		"original_query_id": final_state["original_query_id"],
 		"original_query": final_state["original_query"],
 		"gold_answer": final_state.get("gold_answer"),
+		"initial_answer": final_state.get("initial_answer", ""),
 		"final_answer": final_state.get("final_answer", ""),
 		"final_contexts": final_state.get("final_contexts", []),
 		"relevant_contexts": final_state.get("relevant_contexts", []),
-		"evidence_store_contexts": final_state.get("evidence_store_contexts", []),
+		"evidence_store_contexts": final_state.get(
+			"evidence_store_contexts",
+			[],
+		),
 		"execution_trace": final_state.get("execution_trace", {}),
 		"input_tokens": final_state.get("input_tokens", 0),
 		"output_tokens": final_state.get("output_tokens", 0),
 		"total_cost": final_state.get("total_cost", 0.0),
-		"initial_ragas_metrics": final_state.get("initial_ragas_metrics", {}),
+		"initial_ragas_metrics": final_state.get(
+			"initial_ragas_metrics",
+			{},
+		),
 		"final_ragas_metrics": final_state.get("final_ragas_metrics", {}),
 	}

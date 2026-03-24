@@ -294,6 +294,26 @@ def _missing_placeholders(template: str, bindings: Dict[str, Any]) -> List[str]:
 	return [name for name in placeholders if bindings.get(name) in (None, "")]
 
 
+def _strip_doc_id_suffix(answer: Optional[str]) -> str:
+	"""Remove a trailing doc_id suffix from an answer string.
+
+	Parameters
+	----------
+	answer : Optional[str]
+		Answer text that may end with a bracketed numeric doc_id.
+
+	Returns
+	-------
+	str
+		Answer text with a trailing ``[12345]`` suffix removed if present.
+	"""
+	_DOC_ID_SUFFIX_RE = re.compile(r"\s*\[\d+\]\s*$")
+
+	if not answer:
+		return ""
+	return _DOC_ID_SUFFIX_RE.sub("", answer).strip()
+
+
 def format_results_dataframe(
 	examples: List[Dict[str, Any]],
 	results: Dict[str, Any],

@@ -1,5 +1,4 @@
 import os
-import json
 import re
 import time
 from functools import lru_cache
@@ -257,6 +256,102 @@ def _load_critic_json(
 	return _normalize_critic_object(obj=obj, contexts=contexts)
 
 
+def _normalize_planner_object(obj: Any) -> Dict[str, Any]:
+	"""Normalize parsed planner output into the required schema.
+
+	Parameters
+	----------
+	obj : Any
+		Parsed JSON-like object.
+
+	Returns
+	-------
+	dict[str, Any]
+		Canonical planner object.
+	"""
+	fallback: Dict[str, Any] = {
+		"outcome": "decompose",
+		"plan": [],
+	}
+	if not isinstance(obj, dict):
+		return fallback
+
+	plan = obj.get("plan", [])
+	if not isinstance(plan, list):
+		plan = []
+
+	normalized_plan: List[Dict[str, Any]] = []
+	seen_step_ids = set()
+	seen_bind_variables = set()
+
+	for idx, step in enumerate(plan, start=1):
+		if not isinstance(step, dict):
+			continue
+
+		step_id = step.get("step_id")
+		if not isinstance(step_id, str) or not re.fullmatch(r"s\d+", step_id):
+			step_id = f"s{idx}"
+
+		if step_id in seen_step_ids:
+			step_id = f"s{idx}"
+		seen_step_ids.add(step_id)
+
+		query_template = step.get("query_template")
+		if not isinstance(query_template, str):
+			query_template = ""
+		query_template = query_template.strip()
+		if not query_template:
+			continue
+
+		bind_variable = step.get("bind_variable")
+		if isinstance(bind_variable, str):
+			bind_variable = bind_variable.strip() or None
+		else:
+			bind_variable = None
+
+		if bind_variable in seen_bind_variables:
+			bind_variable = None
+		elif bind_variable is not None:
+			seen_bind_variables.add(bind_variable)
+
+		depends_on = step.get("depends_on", [])
+		if isinstance(depends_on, str):
+			depends_on = [depends_on]
+		if not isinstance(depends_on, list):
+			depends_on = []
+
+		valid_prior_ids = {f"s{i}" for i in range(1, idx)}
+		depends_on = [
+			item for item in depends_on
+			if isinstance(item, str) and item in valid_prior_ids
+		]
+		depends_on = list(dict.fromkeys(depends_on))
+
+		normalized_plan.append(
+			{
+				"step_id": f"s{len(normalized_plan) + 1}",
+				"query_template": query_template,
+				"bind_variable": bind_variable,
+				"depends_on": depends_on,
+			}
+		)
+
+	id_map = {
+		old_step["step_id"]: f"s{idx}"
+		for idx, old_step in enumerate(normalized_plan, start=1)
+	}
+	for idx, step in enumerate(normalized_plan, start=1):
+		step["step_id"] = f"s{idx}"
+		step["depends_on"] = [
+			id_map[dep] for dep in step["depends_on"] if dep in id_map
+		]
+
+	return {
+		"outcome": "decompose",
+		"plan": normalized_plan,
+	}
+
+
 def _load_planner_json(text: Any) -> Dict[str, Any]:
 	"""Parse and normalize planner JSON from model output.
 
@@ -295,7 +390,7 @@ def call_critic(
 		Original question text.
 	current_answer : str
 		Current answer draft.
-	contexts : Optional[list[dict[str, Any]]], default None
+	contexts : Optional[List[Dict[str, Any]]], default None
 		Contexts passed to the critic.
 
 	Returns
@@ -322,101 +417,6 @@ def call_critic(
 	}
 
 
-def _normalize_planner_object(obj: Any) -> Dict[str, Any]:
-	"""Normalize parsed planner output into the required schema.
-
-	Parameters
-	----------
-	obj : Any
-		Parsed JSON-like object.
-
-	Returns
-	-------
-	dict[str, Any]
-		Canonical planner object.
-	"""
-	fallback: Dict[str, Any] = {
-		"outcome": "decompose",
-		"plan": [],
-	}
-	if not isinstance(obj, dict):
-		return fallback
-
-	plan = obj.get("plan", [])
-	if not isinstance(plan, list):
-		plan = []
-
-	normalized_plan: List[Dict[str, Any]] = []
-	seen_step_ids = set()
-
-	for idx, step in enumerate(plan, start=1):
-		if not isinstance(step, dict):
-			continue
-
-		step_id = step.get("step_id")
-		if not isinstance(step_id, str) or not re.fullmatch(r"s\d+", step_id):
-			step_id = f"s{idx}"
-
-		if step_id in seen_step_ids:
-			step_id = f"s{idx}"
-		seen_step_ids.add(step_id)
-
-		query_template = step.get("query_template")
-		if not isinstance(query_template, str):
-			query_template = ""
-		query_template = query_template.strip()
-		if not query_template:
-			continue
-
-		bind = step.get("bind", [])
-		if isinstance(bind, str):
-			bind = [bind]
-		if not isinstance(bind, list):
-			bind = []
-		bind = [
-			item.strip() for item in bind
-			if isinstance(item, str) and item.strip()
-		]
-		bind = list(dict.fromkeys(bind))
-
-		depends_on = step.get("depends_on", [])
-		if isinstance(depends_on, str):
-			depends_on = [depends_on]
-		if not isinstance(depends_on, list):
-			depends_on = []
-
-		valid_prior_ids = {f"s{i}" for i in range(1, idx)}
-		depends_on = [
-			item for item in depends_on
-			if isinstance(item, str) and item in valid_prior_ids
-		]
-		depends_on = list(dict.fromkeys(depends_on))
-
-		normalized_plan.append(
-			{
-				"step_id": f"s{len(normalized_plan) + 1}",
-				"query_template": query_template,
-				"bind": bind,
-				"depends_on": depends_on,
-			}
-		)
-
-	id_map = {
-		old_step["step_id"]: f"s{idx}"
-		for idx, old_step in enumerate(normalized_plan, start=1)
-	}
-	for idx, step in enumerate(normalized_plan, start=1):
-		step["step_id"] = f"s{idx}"
-		step["depends_on"] = [
-			id_map[dep] for dep in step["depends_on"] if dep in id_map
-		]
-
-	return {
-		"outcome": "decompose",
-		"plan": normalized_plan,
-	}
-
-
 def call_planner(
 	config: Any,
 	query: str,
@@ -430,7 +430,7 @@ def call_planner(
 		Pipeline config.
 	query : str
 		Original question text.
-	failed_step_history : Optional[list[dict[str, Any]]], default None
+	failed_step_history : Optional[List[Dict[str, Any]]], default None
 		History of failed steps from earlier rounds.
 
 	Returns
@@ -451,36 +451,40 @@ def call_planner(
 		"object": obj,
 	}
 
+
 def _build_empty_executor_object(
-	bind_variables: List[str],
+	bind_variable: Optional[str],
 ) -> Dict[str, Any]:
-	"""Build an empty executor result for the requested variables.
+	"""Build an empty executor result.
 
 	Parameters
 	----------
-	bind_variables : List[str]
-		Variables expected in the executor output.
+	bind_variable : Optional[str]
+		Single variable expected in the executor output, or None.
 
 	Returns
 	-------
 	Dict[str, Any]
 		Canonical empty executor object.
 	"""
+	if bind_variable is None:
+		binding = None
+	else:
+		binding = {
+			"variable": bind_variable,
+			"value": None,
+			"citations": [],
+		}
+
 	return {
 		"answer": "I do not know.",
-		"bindings": {
-			var_name: {
-				"value": None,
-				"citations": [],
-			}
-			for var_name in bind_variables
-		},
+		"binding": binding,
 	}
 
 
 def _normalize_step_executor_object(
 	obj: Any,
-	bind_variables: List[str],
+	bind_variable: Optional[str],
 	contexts: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
 	"""Normalize parsed executor output into the required schema.
@@ -489,8 +493,8 @@ def _normalize_step_executor_object(
 	----------
 	obj : Any
 		Parsed JSON-like object.
-	bind_variables : List[str]
-		Variables required in the final output.
+	bind_variable : Optional[str]
+		Variable required in the final output, or None.
 	contexts : List[Dict[str, Any]]
 		Retrieval contexts that define the allowed doc_ids.
 
@@ -499,7 +503,7 @@ def _normalize_step_executor_object(
 	Dict[str, Any]
 		Canonical executor object.
 	"""
-	fallback = _build_empty_executor_object(bind_variables)
+	fallback = _build_empty_executor_object(bind_variable)
 
 	if not isinstance(obj, dict):
 		return fallback
@@ -509,57 +513,58 @@ def _normalize_step_executor_object(
 		answer = "I do not know."
 	answer = answer.strip() or "I do not know."
 
-	raw_bindings = obj.get("bindings", {})
-	if not isinstance(raw_bindings, dict):
-		raw_bindings = {}
+	if bind_variable is None:
+		return {
+			"answer": answer,
+			"binding": None,
+		}
+
+	raw_binding = obj.get("binding", {})
+	if not isinstance(raw_binding, dict):
+		raw_binding = {}
+
+	variable = raw_binding.get("variable")
+	if not isinstance(variable, str) or variable.strip() != bind_variable:
+		variable = bind_variable
+
+	value = raw_binding.get("value", None)
+
+	citations = raw_binding.get("citations", [])
+	if isinstance(citations, str):
+		citations = [citations]
+	if not isinstance(citations, list):
+		citations = []
 
 	valid_doc_ids = {
 		str(ctx.get("doc_id")).strip()
 		for ctx in contexts
 		if str(ctx.get("doc_id", "")).strip()
 	}
+	citations = [
+		doc_id.strip()
+		for doc_id in citations
+		if isinstance(doc_id, str) and doc_id.strip() in valid_doc_ids
+	]
+	citations = list(dict.fromkeys(citations))
 
-	normalized_bindings: Dict[str, Dict[str, Any]] = {}
-
-	for var_name in bind_variables:
-		entry = raw_bindings.get(var_name, {})
-		if not isinstance(entry, dict):
-			entry = {}
-
-		value = entry.get("value", None)
-
-		citations = entry.get("citations", [])
-		if isinstance(citations, str):
-			citations = [citations]
-		if not isinstance(citations, list):
-			citations = []
-
-		citations = [
-			doc_id.strip()
-			for doc_id in citations
-			if isinstance(doc_id, str) and doc_id.strip() in valid_doc_ids
-		]
-		citations = list(dict.fromkeys(citations))
-
-		if value is None:
-			citations = []
-		elif not citations:
-			value = None
-
-		normalized_bindings[var_name] = {
-			"value": value,
-			"citations": citations,
-		}
+	if value is None:
+		citations = []
+	elif not citations:
+		value = None
 
 	return {
 		"answer": answer,
-		"bindings": normalized_bindings,
+		"binding": {
+			"variable": variable,
+			"value": value,
+			"citations": citations,
+		},
 	}
 
 
 def _load_step_executor_json(
 	text: Any,
-	bind_variables: List[str],
+	bind_variable: Optional[str],
 	contexts: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
 	"""Parse and normalize step executor JSON from model output.
@@ -568,8 +573,8 @@ def _load_step_executor_json(
 	----------
 	text : Any
 		Model output text or wrapper object.
-	bind_variables : List[str]
-		Variables expected in the executor output.
+	bind_variable : Optional[str]
+		Variable expected in the executor output, or None.
 	contexts : List[Dict[str, Any]]
 		Retrieval contexts for validation of doc_ids.
 
@@ -580,21 +585,21 @@ def _load_step_executor_json(
 	"""
 	obj = _parse_json_dict(text)
 	if obj is None:
-		return _build_empty_executor_object(bind_variables)
+		return _build_empty_executor_object(bind_variable)
 	return _normalize_step_executor_object(
 		obj=obj,
-		bind_variables=bind_variables,
+		bind_variable=bind_variable,
 		contexts=contexts,
 	)
-	
+
 
 def execute_step(
 	config: Any,
 	step_query: str,
-	bind_variables: List[str],
+	bind_variable: Optional[str],
 	contexts: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-	"""Execute one decomposition step and extract variable bindings.
+	"""Execute one decomposition step and extract an optional binding.
 
 	Parameters
 	----------
@@ -602,8 +607,8 @@ def execute_step(
 		Pipeline config.
 	step_query : str
 		Rendered step query.
-	bind_variables : List[str]
-		Variables to bind from this step.
+	bind_variable : Optional[str]
+		Variable to bind from this step, or None.
 	contexts : List[Dict[str, Any]]
 		Retrieval contexts for this step.
 
@@ -615,13 +620,13 @@ def execute_step(
 	system_prompt = get_sys_prompt_step_executor()
 	user_prompt = get_user_prompt_step_executor(
 		step_query=step_query,
-		bind_variables=bind_variables,
+		bind_variable=bind_variable,
 		contexts=contexts,
 	)
 	response = _call_llm(config, system_prompt, user_prompt)
 	obj = _load_step_executor_json(
 		text=response.get("text", ""),
-		bind_variables=bind_variables,
+		bind_variable=bind_variable,
 		contexts=contexts,
 	)
 	return {
