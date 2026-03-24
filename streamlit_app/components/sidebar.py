@@ -18,16 +18,6 @@ def get_sidebar():
 	with st.sidebar:
 		formatted_results = get_formatted_results()
 
-		question_types = st.segmented_control(
-			"**Question Type**",
-			["comparison", "bridge"],
-			default=["comparison", "bridge"],
-			selection_mode="multi",
-		)
-		formatted_results = formatted_results.loc[
-			formatted_results["type"].isin(question_types)
-		]
-
 		critiques = st.segmented_control(
 			"**Critic Outcome**",
 			["pass", "decompose"],
