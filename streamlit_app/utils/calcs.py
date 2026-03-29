@@ -3,23 +3,24 @@ from typing import Dict, List
 import pandas as pd
 import streamlit as st
 
-def get_ragas_metrics() -> pd.DataFrame:
-	"""Compute mean RAGAS metrics for initial and final RAG architectures.
+def get_metrics() -> pd.DataFrame:
+	"""Compute mean metrics for initial and final architectures.
 
 	Returns
 	-------
 	pd.DataFrame
 		A two-row DataFrame summarizing the mean metric values for the initial
 		and final RAG architectures. The returned columns are:
-		``RAG Architecture``, ``Answer Accuracy``, ``Context Recall``,
-		``Context Precision``, and ``Faithfulness``.
+		``Architecture``, ``Answer - Human``, ``Answer - RAGAS``,
+		``Context Recall``, ``Context Precision``, and ``Faithfulness``.
 	"""
 	df = st.session_state["formatted_results"]
 
 	metric_groups: List[Dict[str, object]] = [
 		{
-			"architecture": "No Critique",
+			"architecture": "Answer Only",
 			"columns": [
+				"initial_answer_accuracy_human",
 				"initial_answer_accuracy",
 				"initial_context_recall",
 				"initial_context_precision",
@@ -28,9 +29,10 @@ def get_ragas_metrics() -> pd.DataFrame:
 		},
 		{
 			"architecture": (
-				"Critique and Query Decomposition"
+				"Answer-Critique-[Decompose]"
 			),
 			"columns": [
+				"final_answer_accuracy_human",
 				"final_answer_accuracy",
 				"final_context_recall",
 				"final_context_precision",
@@ -40,7 +42,8 @@ def get_ragas_metrics() -> pd.DataFrame:
 	]
 
 	output_columns = [
-		"Answer Accuracy",
+		"Accuracy - Human",
+		"Accuracy - RAGAS",
 		"Context Recall",
 		"Context Precision",
 		"Faithfulness",
@@ -50,9 +53,44 @@ def get_ragas_metrics() -> pd.DataFrame:
 	for group in metric_groups:
 		mean_values = df[group["columns"]].mean().round(4).tolist()
 		row = {
-			"RAG Architecture": group["architecture"],
+			"Architecture": group["architecture"],
 			**dict(zip(output_columns, mean_values)),
 		}
 		rows.append(row)
 
 	return pd.DataFrame(rows)
+
+
+def get_answer_accuracy_cat(df: pd.DataFrame) -> None:
+	"""
+	Create a categorical accuracy column from a numeric accuracy column.
+
+	Parameters
+	----------
+	df : pd.DataFrame
+		Input DataFrame containing the accuracy column.
+
+	Returns
+	-------
+	pd.DataFrame
+		DataFrame with an added categorical columns '<col>_cat'.
+	"""
+	cols = [
+			"initial_answer_accuracy",
+			"initial_answer_accuracy_human",
+			"final_answer_accuracy",
+			"final_answer_accuracy_human",
+		]
+	for col in cols:
+		cat_col = f"{col}_cat"
+
+		df[cat_col] = pd.Series(
+			pd.NA,
+			index=df.index,
+			dtype="object",
+		)
+
+		df.loc[df[col] == 1, cat_col] = "Correct"
+		df.loc[df[col] == 0, cat_col] = "Incorrect"
+		df.loc[(df[col] != 1) & (df[col] != 0), cat_col] = "Partially Correct"
+	return df

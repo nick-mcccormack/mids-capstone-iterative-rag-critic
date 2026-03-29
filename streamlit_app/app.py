@@ -4,7 +4,8 @@ import streamlit as st
 
 from components.sidebar import get_sidebar
 from components.query_details import pick_query, render_workflow
-from components.summary_results import render_ragas_metrics_table
+from components.summary_results import render_metrics_table
+from components.evaluation_calibration import render_evaluation_calibration
 from utils.helpers import _center_header
 from utils.initialize_state import state_init
 
@@ -35,14 +36,17 @@ def main() -> None:
 
 	if st.session_state["page"] == "query_selector":
 		_center_header("Summary Metrics", "h3")
-		render_ragas_metrics_table()
+		render_metrics_table()
+
+		with st.expander("RAGAS Calibration", expanded=True):
+			render_evaluation_calibration()
 
 		st.divider()
 
 		_center_header("Query Details", "h3")
 		pick_query()
 	else:
-		_center_header("Workflow Details", "h3")
+		_center_header("Execution Details", "h3")
 		render_workflow(max_critic_loops=4)
 
 

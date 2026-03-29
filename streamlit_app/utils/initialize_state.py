@@ -2,7 +2,6 @@ import streamlit as st
 
 from data.doc_loader import get_formatted_results
 
-
 def state_init() -> None:
 	"""Initialize Streamlit session state used across the application.
 

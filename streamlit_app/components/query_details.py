@@ -9,6 +9,7 @@ QUERY_TABLE_COLUMNS = [
 	"initial_answer",
 	"final_answer",
 	"gold_answer",
+	"final_answer_accuracy_human",
 	"final_answer_accuracy",
 	"final_context_recall",
 	"final_context_precision",
@@ -23,25 +24,30 @@ QUERY_TABLE_CONFIG = {
 	),
 	"initial_answer": st.column_config.Column(
 		"Initial Answer",
-		width=175,
+		width=125,
 	),
 	"final_answer": st.column_config.Column(
 		"Final Answer",
-		width=175,
+		width=125,
 	),
 	"gold_answer": st.column_config.Column(
 		"Gold Answer",
 		width=125,
 	),
+	"final_answer_accuracy_human": st.column_config.NumberColumn(
+		"Accuracy - Human",
+		format="%.4f",
+		width=125,
+	),
 	"final_answer_accuracy": st.column_config.NumberColumn(
-		"Answer Accuracy",
+		"Accuracy - RAGAS",
 		format="%.4f",
 		width=125,
 	),
 	"final_context_recall": st.column_config.NumberColumn(
 		"Context Recall",
 		format="%.4f",
-		width=125,
+		width=100,
 	),
 	"final_context_precision": st.column_config.NumberColumn(
 		"Context Precision",
@@ -51,7 +57,7 @@ QUERY_TABLE_CONFIG = {
 	"final_faithfulness": st.column_config.NumberColumn(
 		"Faithfulness",
 		format="%.4f",
-		width=125,
+		width=100,
 	),
 }
 
@@ -121,17 +127,17 @@ def pick_query() -> None:
 	-------
 	None
 	"""
-	st.write(
-		"Select a query from the evaluation dataset to trace its workflow."
-	)
+	st.caption("**General Execution Plan: Retrieve → Rerank → Generate → Critique → [Decompose]**")
 	st.caption(
-		"Workflow: retrieve evidence, rerank the results, generate an "
-		"answer, and critique it for grounding and completeness. If the "
-		"answer passes, it is returned. If it fails, the system decomposes "
-		"the question into targeted step-queries, retrieves and executes "
-		"those steps to fill in missing facts, and then produces a revised "
-		"final answer."
+		"An initial RAG answer is evaluated for groundedness and completeness. "
+		"If it passes, it is returned. If not, the query is decomposed into "
+		"targeted step-queries that are retrieved and answered sequentially, "
+		"with dependencies carried forward. The results are aggregated into a "
+		"revised answer, which is re-evaluated. This loop continues until the "
+		"answer passes or a maximum iteration limit is reached."
 	)
+
+	st.caption("*Select a query from the evaluation dataset to trace its execution.*")
 
 	display_df = st.session_state["formatted_results"][QUERY_TABLE_COLUMNS]
 	selection = st.dataframe(

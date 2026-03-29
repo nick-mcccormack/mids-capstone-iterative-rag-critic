@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from utils.calcs import get_answer_accuracy_cat
 
 DATA_DIR = Path(__file__).resolve().parent / "files"
 
@@ -19,7 +20,8 @@ def get_formatted_results() -> pd.DataFrame:
 	path = DATA_DIR / "formatted_results.pkl"
 
 	with path.open("rb") as file:
-		return pickle.load(file)
+		df = pickle.load(file)
+		return get_answer_accuracy_cat(df)
 
 
 def get_raw_results(idx: int) -> List[Dict[str, Any]]:

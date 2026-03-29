@@ -4,11 +4,11 @@ import streamlit as st
 
 from typing import Dict
 
-from utils.calcs import get_ragas_metrics
+from utils.calcs import get_metrics
 from utils.helpers import _format_pct_delta
 
 
-def render_ragas_metrics_table() -> None:
+def render_metrics_table() -> None:
 	"""Render a styled comparison table for aggregate RAGAS metrics.
 
 	The table compares the baseline architecture against the final critique-
@@ -26,33 +26,14 @@ def render_ragas_metrics_table() -> None:
 	ValueError
 		If the metrics DataFrame does not contain exactly two rows.
 	"""
-	metrics_df = get_ragas_metrics()
-
-	required_columns = [
-		"RAG Architecture",
-		"Answer Accuracy",
-		"Context Recall",
-		"Context Precision",
-		"Faithfulness",
-	]
-	missing_columns = sorted(set(required_columns) - set(metrics_df.columns))
-
-	if missing_columns:
-		raise KeyError(
-			"Missing required columns in metrics_df: "
-			f"{', '.join(missing_columns)}"
-		)
-
-	if len(metrics_df) != 2:
-		raise ValueError(
-			"metrics_df must contain exactly two rows: one initial and one final."
-		)
+	metrics_df = get_metrics()
 
 	initial_row = metrics_df.iloc[0]
 	final_row = metrics_df.iloc[1]
 
 	metric_columns = [
-		"Answer Accuracy",
+		"Accuracy - Human",
+		"Accuracy - RAGAS",
 		"Context Recall",
 		"Context Precision",
 		"Faithfulness",
@@ -76,10 +57,13 @@ def render_ragas_metrics_table() -> None:
 		<thead>
 			<tr style="border-bottom: 2px solid #d1d5db;">
 				<th style="text-align: left; padding: 12px 14px;">
-					RAG Architecture
+					Architecture
 				</th>
 				<th style="text-align: left; padding: 12px 14px;">
-					Answer Accuracy
+					Accuracy - Human
+				</th>
+				<th style="text-align: left; padding: 12px 14px;">
+					Accuracy - RAGAS
 				</th>
 				<th style="text-align: left; padding: 12px 14px;">
 					Context Recall
@@ -95,10 +79,13 @@ def render_ragas_metrics_table() -> None:
 		<tbody>
 			<tr style="border-bottom: 1px solid #e5e7eb;">
 				<td style="padding: 14px; font-weight: 600;">
-					{initial_row["RAG Architecture"]}
+					{initial_row["Architecture"]}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
-					{float(initial_row["Answer Accuracy"]):.4f}
+					{float(initial_row["Accuracy - Human"]):.4f}
+				</td>
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
+					{float(initial_row["Accuracy - RAGAS"]):.4f}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Context Recall"]):.4f}
@@ -112,10 +99,13 @@ def render_ragas_metrics_table() -> None:
 			</tr>
 			<tr>
 				<td style="padding: 14px; font-weight: 600;">
-					{final_row["RAG Architecture"]}
+					{final_row["Architecture"]}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
-					{final_cells["Answer Accuracy"]}
+					{final_cells["Accuracy - Human"]}
+				</td>
+				<td style="padding: 14px; text-align: left; font-weight: 600;">
+					{final_cells["Accuracy - RAGAS"]}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Context Recall"]}
