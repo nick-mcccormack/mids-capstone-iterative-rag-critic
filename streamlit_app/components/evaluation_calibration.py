@@ -14,14 +14,17 @@ CATEGORY_ORDER = [
 CELL_COLORS = {
 	("Incorrect", "Incorrect"): "#d9d9d9",
 	("Incorrect", "Partially Correct"): "#e6c4c4",
-	("Incorrect", "Correct"): "#de8e8e",
+	("Incorrect", "Correct"): "#e6c4c4",
 	("Partially Correct", "Incorrect"): "#cfe6c9",
 	("Partially Correct", "Partially Correct"): "#d9d9d9",
 	("Partially Correct", "Correct"): "#e6c4c4",
-	("Correct", "Incorrect"): "#9fde8e",
+	("Correct", "Incorrect"): "#cfe6c9",
 	("Correct", "Partially Correct"): "#cfe6c9",
 	("Correct", "Correct"): "#d9d9d9",
 }
+
+EMPTY_CELL_COLOR = "#f4f4f4"
+DEFAULT_CELL_COLOR = "#f4f4f4"
 
 
 def _build_calibration_table(
@@ -112,8 +115,15 @@ def _render_single_calibration_table_html(
 
 		for col_label in table.columns:
 			value = int(table.loc[row_label, col_label])
-			bg_color = CELL_COLORS.get((row_label, col_label), "#f4f4f4")
 			display_value = _format_count(value)
+
+			if value == 0:
+				bg_color = EMPTY_CELL_COLOR
+			else:
+				bg_color = CELL_COLORS.get(
+					(row_label, col_label),
+					DEFAULT_CELL_COLOR,
+				)
 
 			row_cells.append(
 				(
@@ -159,7 +169,6 @@ def render_evaluation_calibration() -> None:
 	None
 		Render-only function. Outputs directly to Streamlit.
 	"""
-
 	initial_table = _build_calibration_table(
 		df=st.session_state["formatted_results"],
 		ragas_cat_col="initial_answer_accuracy_cat",
