@@ -1,8 +1,10 @@
+import os
 import streamlit as st
 
 from data.doc_loader import get_raw_results
 from utils.helpers import _go_to_query_selector, _render_labeled_heading
 
+WORKFLOW_PATH = os.path.join(os.getcwd(), "images", "workflow.jpg")
 
 QUERY_TABLE_COLUMNS = [
 	"question",
@@ -206,6 +208,12 @@ def render_workflow(max_critic_loops: int) -> None:
 
 	_render_labeled_heading(header="Query:", text=original_query)
 	_render_labeled_heading(header="Gold Answer:", text=gold_answer)
+	
+	st.divider()
+
+	with st.expander("General Workflow"):
+		st.image(WORKFLOW_PATH)
+
 	st.divider()
 
 	with st.expander("Initial Retrieve and Rerank"):

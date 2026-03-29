@@ -12,7 +12,6 @@ from utils.initialize_state import state_init
 
 LOGO_PATH = os.path.join(os.getcwd(), "images", "logo.jpg")
 
-
 def main() -> None:
 	"""Render the main Streamlit application.
 
