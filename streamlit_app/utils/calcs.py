@@ -11,14 +11,14 @@ def get_metrics() -> pd.DataFrame:
 	pd.DataFrame
 		A two-row DataFrame summarizing the mean metric values for the initial
 		and final RAG architectures. The returned columns are:
-		``Architecture``, ``Answer - Human``, ``Answer - RAGAS``,
+		``Answer``, ``Answer - Human``, ``Answer - RAGAS``,
 		``Context Recall``, ``Context Precision``, and ``Faithfulness``.
 	"""
 	df = st.session_state["formatted_results"]
 
 	metric_groups: List[Dict[str, object]] = [
 		{
-			"architecture": "Answer Only",
+			"answer": "Initial Answer",
 			"columns": [
 				"initial_answer_accuracy_human",
 				"initial_answer_accuracy",
@@ -28,8 +28,8 @@ def get_metrics() -> pd.DataFrame:
 			],
 		},
 		{
-			"architecture": (
-				"Answer-Critique-[Decompose]"
+			"answer": (
+				"Final Answer"
 			),
 			"columns": [
 				"final_answer_accuracy_human",
@@ -53,7 +53,7 @@ def get_metrics() -> pd.DataFrame:
 	for group in metric_groups:
 		mean_values = df[group["columns"]].mean().round(4).tolist()
 		row = {
-			"Architecture": group["architecture"],
+			"Answer": group["answer"],
 			**dict(zip(output_columns, mean_values)),
 		}
 		rows.append(row)

@@ -57,7 +57,7 @@ def render_metrics_table() -> None:
 		<thead>
 			<tr style="border-bottom: 2px solid #d1d5db;">
 				<th style="text-align: left; padding: 12px 14px;">
-					Architecture
+					Answer
 				</th>
 				<th style="text-align: left; padding: 12px 14px;">
 					Accuracy - Human
@@ -79,7 +79,7 @@ def render_metrics_table() -> None:
 		<tbody>
 			<tr style="border-bottom: 1px solid #e5e7eb;">
 				<td style="padding: 14px; font-weight: 600;">
-					{initial_row["Architecture"]}
+					{initial_row["Answer"]}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{float(initial_row["Accuracy - Human"]):.4f}
@@ -99,7 +99,7 @@ def render_metrics_table() -> None:
 			</tr>
 			<tr>
 				<td style="padding: 14px; font-weight: 600;">
-					{final_row["Architecture"]}
+					{final_row["Answer"]}
 				</td>
 				<td style="padding: 14px; text-align: left; font-weight: 600;">
 					{final_cells["Accuracy - Human"]}
