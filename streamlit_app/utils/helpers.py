@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from typing import Dict, List
 
 def _center_header(text: str, size: str) -> None:
 	"""Render a centered HTML header.
@@ -119,3 +120,40 @@ def _format_pct_delta(initial: float, final: float) -> str:
 		f"({sign}{pct_change:.0f}%)"
 		"</span>"
 	)
+
+
+def get_rag_citations() -> str:
+	"""
+	Return APA-formatted citations for RAG pipeline components.
+
+	Returns
+	-------
+	str
+		APA citations for pipeline components formatted for markdown.
+	"""
+	citations = [
+		(
+			"Lin, J., Ma, X., Lin, S.-C., Yang, J.-H., Pradeep, R., "
+			"& Nogueira, R. (2021). Pyserini: A Python toolkit for "
+			"reproducible information retrieval research with sparse "
+			"and dense representations. In Proceedings of the 44th "
+			"International ACM SIGIR Conference on Research and "
+			"Development in Information Retrieval (pp. 2356–2362)."
+		),
+		(
+			"Yang, Z., Qi, P., Zhang, S., Bengio, Y., Cohen, W. W., "
+			"Salakhutdinov, R., & Manning, C. D. (2018). HotpotQA: "
+			"A dataset for diverse, explainable multi-hop question "
+			"answering. In Proceedings of the 2018 Conference on "
+			"Empirical Methods in Natural Language Processing "
+			"(pp. 2369–2380)."
+		)
+	]
+
+	lines: List[str] = []
+
+	for citation in citations:
+		lines.append(f"- {citation}")
+	lines.append("")
+
+	return "\n".join(lines).strip()

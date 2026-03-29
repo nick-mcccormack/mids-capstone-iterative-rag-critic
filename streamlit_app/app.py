@@ -6,9 +6,9 @@ from components.sidebar import get_sidebar
 from components.query_details import pick_query, render_workflow
 from components.summary_results import render_metrics_table
 from components.evaluation_calibration import render_evaluation_calibration
-from utils.helpers import _center_header
+from utils.helpers import _center_header, get_rag_citations
 from utils.initialize_state import state_init
-
+from utils.config import get_rag_config
 
 LOGO_PATH = os.path.join(os.getcwd(), "images", "logo.jpg")
 
@@ -44,6 +44,12 @@ def main() -> None:
 
 		_center_header("Query Details", "h3")
 		pick_query()
+		
+		with st.expander("RAG Config"):
+			st.json(get_rag_config())
+		
+		with st.expander("Citations"):
+			st.markdown(get_rag_citations())
 	else:
 		_center_header("Execution Details", "h3")
 		render_workflow(max_critic_loops=4)
