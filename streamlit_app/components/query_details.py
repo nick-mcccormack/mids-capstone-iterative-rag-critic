@@ -4,8 +4,6 @@ import streamlit as st
 from data.doc_loader import get_raw_results
 from utils.helpers import _go_to_query_selector, _render_labeled_heading
 
-WORKFLOW_PATH = os.path.join(os.getcwd(), "images", "workflow.jpg")
-
 QUERY_TABLE_COLUMNS = [
 	"question",
 	"initial_answer",
@@ -208,16 +206,11 @@ def render_workflow(max_critic_loops: int) -> None:
 
 	_render_labeled_heading(header="Query:", text=original_query)
 	_render_labeled_heading(header="Gold Answer:", text=gold_answer)
-	
-	st.divider()
-
-	with st.expander("General Workflow"):
-		st.image(WORKFLOW_PATH)
 
 	st.divider()
 
 	with st.expander("Initial Retrieve and Rerank"):
-		st.json(initial_contexts)
+		st.json(initial_contexts, expanded=1)
 
 	with st.expander("Initial Answer"):
 		st.json(initial_answer)
@@ -247,7 +240,7 @@ def render_workflow(max_critic_loops: int) -> None:
 				evidence_store_contexts=evidence_store_contexts,
 				relevant_context_ids=relevant_context_ids,
 			)
-			st.json(response)
+			st.json(response, expanded=1)
 
 		if idx >= len(plans):
 			continue
@@ -260,14 +253,14 @@ def render_workflow(max_critic_loops: int) -> None:
 
 				step = step_executions[step_idx]
 				_render_labeled_heading(header=f"Step {step_num}:")
-				st.json(_build_step_display(step))
+				st.json(_build_step_display(step), expanded=1)
 
 				step_idx += 1
 				if step.get("status") != "completed":
 					break
 
 	with st.expander("Final Answer"):
-		st.json(final_response)
+		st.json(final_response, expanded=1)
 
 	st.divider()
 

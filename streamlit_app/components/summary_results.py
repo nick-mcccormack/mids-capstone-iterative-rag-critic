@@ -122,3 +122,16 @@ def render_metrics_table() -> None:
 	"""
 
 	st.markdown(html, unsafe_allow_html=True)
+	st.markdown(
+		"""
+		<p style="
+			font-size: 0.9rem;
+			color: #6b7280;
+			margin-top: 0.35rem;
+		">
+			Note. Percentage changes are computed as relative percent change
+			(%Δ = (final − baseline) / baseline × 100).
+		</p>
+		""",
+		unsafe_allow_html=True,
+	)

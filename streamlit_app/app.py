@@ -33,26 +33,31 @@ def main() -> None:
 
 	st.session_state["formatted_results"] = get_sidebar()
 
-	if st.session_state["page"] == "query_selector":
-		_center_header("Summary Metrics", "h3")
-		render_metrics_table()
+	tab1, tab2 = st.tabs(["Summary Metrics", "Query Details"])
 
+	with tab1:
+		_center_header("Summary Metrics", "h3")
+		
+		render_metrics_table()
+		
 		with st.expander("RAGAS Calibration", expanded=True):
 			render_evaluation_calibration()
-
+		
 		st.divider()
 
-		_center_header("Query Details", "h3")
-		pick_query()
-		
 		with st.expander("RAG Config"):
-			st.json(get_rag_config())
-		
+				st.json(get_rag_config())
+
 		with st.expander("Citations"):
-			st.markdown(get_rag_citations())
-	else:
-		_center_header("Execution Details", "h3")
-		render_workflow(max_critic_loops=4)
+				st.markdown(get_rag_citations())
+	
+	with tab2:
+		if st.session_state["page"] == "query_selector":
+			_center_header("Query Details", "h3")
+			pick_query()	
+		else:
+			_center_header("Execution Details", "h3")
+			render_workflow(max_critic_loops=4)
 
 
 if __name__ == "__main__":
