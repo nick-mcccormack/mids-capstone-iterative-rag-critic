@@ -33,14 +33,13 @@ def main() -> None:
 
 	st.session_state["formatted_results"] = get_sidebar()
 
-	tab1, tab2 = st.tabs(["Summary Metrics", "Query Details"])
+	tab1, tab2 = st.tabs(["Summary", "Details"])
 
 	with tab1:
-		_center_header("Summary Metrics", "h3")
+		with st.expander("Evaluation Summary", expanded=True):		
+			render_metrics_table()
 		
-		render_metrics_table()
-		
-		with st.expander("RAGAS Calibration", expanded=True):
+		with st.expander("LLM-as-a-judge Calibration", expanded=True):
 			render_evaluation_calibration()
 		
 		st.divider()
@@ -53,10 +52,8 @@ def main() -> None:
 	
 	with tab2:
 		if st.session_state["page"] == "query_selector":
-			_center_header("Query Details", "h3")
 			pick_query()	
 		else:
-			_center_header("Execution Details", "h3")
 			render_workflow(max_critic_loops=4)
 
 

@@ -1,8 +1,9 @@
 import html
-from typing import List
-
+import streamlit.components.v1 as components
 import pandas as pd
 import streamlit as st
+
+from typing import List
 
 
 CATEGORY_ORDER = [
@@ -12,19 +13,19 @@ CATEGORY_ORDER = [
 ]
 
 CELL_COLORS = {
-	("Incorrect", "Incorrect"): "#d9d9d9",
-	("Incorrect", "Partially Correct"): "#e6c4c4",
-	("Incorrect", "Correct"): "#e6c4c4",
-	("Partially Correct", "Incorrect"): "#cfe6c9",
-	("Partially Correct", "Partially Correct"): "#d9d9d9",
-	("Partially Correct", "Correct"): "#e6c4c4",
-	("Correct", "Incorrect"): "#cfe6c9",
-	("Correct", "Partially Correct"): "#cfe6c9",
-	("Correct", "Correct"): "#d9d9d9",
+	("Incorrect", "Incorrect"): "#e5e7eb",
+	("Incorrect", "Partially Correct"): "#ede9fe",
+	("Incorrect", "Correct"): "#ede9fe",
+	("Partially Correct", "Incorrect"): "#dbecff",
+	("Partially Correct", "Partially Correct"): "#e5e7eb",
+	("Partially Correct", "Correct"): "#ede9fe",
+	("Correct", "Incorrect"): "#dbecff",
+	("Correct", "Partially Correct"): "#dbecff",
+	("Correct", "Correct"): "#e5e7eb",
 }
 
-EMPTY_CELL_COLOR = "#f4f4f4"
-DEFAULT_CELL_COLOR = "#f4f4f4"
+EMPTY_CELL_COLOR = "#f8fafc"
+DEFAULT_CELL_COLOR = "#f8fafc"
 
 
 def _build_calibration_table(
@@ -32,8 +33,7 @@ def _build_calibration_table(
 	ragas_cat_col: str,
 	human_cat_col: str,
 ) -> pd.DataFrame:
-	"""
-	Build a human-vs-RAGAS crosstab with a fixed category order.
+	"""Build a human-vs-LLM crosstab with a fixed category order.
 
 	Parameters
 	----------
@@ -47,7 +47,7 @@ def _build_calibration_table(
 	Returns
 	-------
 	pd.DataFrame
-		Crosstab with human labels as rows and RAGAS labels as columns.
+		Crosstab with human labels as rows and LLM labels as columns.
 	"""
 	table = pd.crosstab(
 		df[human_cat_col],
@@ -65,8 +65,7 @@ def _build_calibration_table(
 
 
 def _format_count(value: int) -> str:
-	"""
-	Format a count value for display.
+	"""Format a count value for display.
 
 	Parameters
 	----------
@@ -86,17 +85,16 @@ def _format_count(value: int) -> str:
 
 def _render_single_calibration_table_html(
 	table: pd.DataFrame,
-	subtitle: str,
+	title: str,
 ) -> str:
-	"""
-	Render a single calibration table as HTML.
+	"""Render a single calibration matrix as HTML.
 
 	Parameters
 	----------
 	table : pd.DataFrame
 		Crosstab with human labels as rows and RAGAS labels as columns.
-	subtitle : str
-		Label shown beneath the table.
+	title : str
+		Title shown above the table.
 
 	Returns
 	-------
@@ -142,8 +140,8 @@ def _render_single_calibration_table_html(
 		)
 
 	return (
-		'<div class="eval-table-block">'
-		'<div class="eval-table-title">RAGAS</div>'
+		'<section class="eval-card">'
+		f'<div class="eval-card-title">{html.escape(title)}</div>'
 		'<table class="eval-table">'
 		"<thead>"
 		"<tr>"
@@ -155,14 +153,12 @@ def _render_single_calibration_table_html(
 		f"{''.join(body_rows)}"
 		"</tbody>"
 		"</table>"
-		f'<div class="eval-subtitle">{html.escape(subtitle)}</div>'
-		"</div>"
+		"</section>"
 	)
 
 
 def render_evaluation_calibration() -> None:
-	"""
-	Render side-by-side calibration tables comparing human and RAGAS labels.
+	"""Render side-by-side calibration tables comparing human and RAGAS labels.
 
 	Returns
 	-------
@@ -183,159 +179,203 @@ def render_evaluation_calibration() -> None:
 
 	initial_html = _render_single_calibration_table_html(
 		table=initial_table,
-		subtitle="Initial Response",
+		title="Initial Response",
 	)
 
 	final_html = _render_single_calibration_table_html(
 		table=final_table,
-		subtitle="Final Response",
+		title="Final Response",
 	)
 
 	component_html = f"""
 	<style>
+		body {{
+			margin: 0;
+			font-family: sans-serif;
+			color: #111827;
+		}}
+
 		.eval-outer {{
 			width: 100%;
 			max-width: 100%;
-			overflow-x: auto;
-			padding-bottom: 0.25rem;
-		}}
-
-		.eval-wrap {{
-			display: flex;
-			align-items: center;
-			gap: 1rem;
-			width: 100%;
-			max-width: 100%;
+			padding: 0.35rem 0.15rem 0.2rem 0.15rem;
 			box-sizing: border-box;
 		}}
 
-		.eval-human-label {{
-			font-weight: 700;
-			font-size: 1.15rem;
-			white-space: nowrap;
-			flex: 0 0 auto;
-			padding-right: 0.25rem;
+		.eval-header {{
+			margin-bottom: 1.05rem;
 		}}
 
-		.eval-tables {{
+		.eval-title {{
+			font-size: 1.08rem;
+			font-weight: 700;
+			line-height: 1.2;
+			margin-bottom: 0.28rem;
+		}}
+
+		.eval-caption {{
+			font-size: 0.92rem;
+			color: #6b7280;
+			line-height: 1.45;
+		}}
+
+		.eval-legend {{
 			display: flex;
 			flex-wrap: wrap;
-			gap: 1.5rem;
-			align-items: flex-start;
-			justify-content: flex-start;
-			flex: 1 1 auto;
-			min-width: 0;
-			max-width: 100%;
+			gap: 0.75rem 1rem;
+			margin-top: 0.7rem;
+			font-size: 0.87rem;
+			color: #4b5563;
 		}}
 
-		.eval-table-block {{
+		.eval-legend-item {{
+			display: inline-flex;
+			align-items: center;
+			gap: 0.4rem;
+			white-space: nowrap;
+		}}
+
+		.eval-swatch {{
+			width: 0.9rem;
+			height: 0.9rem;
+			border-radius: 3px;
+			border: 1px solid #d1d5db;
+			display: inline-block;
+		}}
+
+		.eval-grid {{
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 1rem;
+			width: 100%;
+			align-items: stretch;
+		}}
+
+		.eval-card {{
+			border: 1px solid #e5e7eb;
+			border-radius: 12px;
+			background: #ffffff;
+			padding: 1rem 1rem 1.05rem 1rem;
+			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+			box-sizing: border-box;
+			width: 100%;
+			height: 100%;
 			display: flex;
 			flex-direction: column;
-			align-items: center;
-			flex: 1 1 420px;
-			min-width: 340px;
-			max-width: 100%;
+			justify-content: flex-start;
 		}}
 
-		.eval-table-title {{
+		.eval-card-title {{
+			font-size: 1rem;
 			font-weight: 700;
-			font-size: 1.15rem;
-			margin-bottom: 0.35rem;
-			line-height: 1.1;
 			text-align: center;
-		}}
-
-		.eval-subtitle {{
-			font-weight: 700;
-			font-size: 1.15rem;
-			margin-top: 0.75rem;
-			line-height: 1.1;
-			text-align: center;
+			line-height: 1.2;
+			margin-bottom: 0.6rem;
 		}}
 
 		table.eval-table {{
 			border-collapse: collapse;
+			table-layout: fixed;
+			width: 100%;
+			margin: 0;
 			font-size: 0.95rem;
-			width: auto;
-			max-width: 100%;
 		}}
 
 		.eval-corner {{
 			border: none;
 			background: transparent;
-			width: 9.5rem;
-			min-width: 9.5rem;
+			width: 28%;
+			min-width: 0;
 		}}
 
 		.eval-col-header {{
 			border: none;
 			background: transparent;
-			padding: 0 0.6rem 0.35rem 0.6rem;
+			padding: 0 0.45rem 0.5rem 0.45rem;
 			text-align: center;
 			font-weight: 700;
-			white-space: nowrap;
+			white-space: normal;
+			width: 24%;
+			line-height: 1.2;
 		}}
 
 		.eval-row-header {{
 			border: none;
 			background: transparent;
-			padding: 0.65rem 0.5rem 0.65rem 0;
+			padding: 0.9rem 0.6rem 0.9rem 0;
 			text-align: right;
 			font-weight: 700;
-			white-space: nowrap;
+			white-space: normal;
+			line-height: 1.2;
 		}}
 
 		.eval-cell {{
-			border: 1px solid #cfcfcf;
-			min-width: 4.3rem;
-			height: 3.1rem;
+			border: 1px solid #d1d5db;
+			width: 24%;
+			height: 3.65rem;
 			text-align: center;
 			vertical-align: middle;
-			font-weight: 500;
+			font-weight: 600;
 			padding: 0;
-		}}
-
-		@media (max-width: 1200px) {{
-			.eval-wrap {{
-				align-items: flex-start;
-			}}
-
-			.eval-human-label {{
-				padding-top: 3.5rem;
-			}}
+			font-size: 0.98rem;
 		}}
 
 		@media (max-width: 980px) {{
-			.eval-wrap {{
-				flex-direction: column;
-				align-items: flex-start;
+			.eval-grid {{
+				grid-template-columns: 1fr;
 			}}
 
-			.eval-human-label {{
-				padding-top: 0;
-				padding-right: 0;
+			.eval-card {{
+				padding: 0.95rem 0.95rem 1rem 0.95rem;
 			}}
 
-			.eval-tables {{
-				width: 100%;
+			.eval-corner {{
+				width: 32%;
 			}}
 
-			.eval-table-block {{
-				flex: 1 1 100%;
-				min-width: 0;
+			.eval-col-header,
+			.eval-cell {{
+				width: 22.66%;
+			}}
+
+			.eval-cell {{
+				height: 3.4rem;
 			}}
 		}}
 	</style>
 
 	<div class="eval-outer">
-		<div class="eval-wrap">
-			<div class="eval-human-label">Human</div>
-			<div class="eval-tables">
-				{initial_html}
-				{final_html}
+		<div class="eval-header">
+			<div class="eval-title">
+				Evaluation Calibration - Human vs. LLM
 			</div>
+
+			<div class="eval-caption">
+				Diagonal cells indicate agreement. Off-diagonal cells indicate
+				disagreement between human and LLM judgments.
+			</div>
+
+			<div class="eval-legend">
+				<div class="eval-legend-item">
+					<span class="eval-swatch" style="background:#e5e7eb;"></span>
+					Agreement
+				</div>
+				<div class="eval-legend-item">
+					<span class="eval-swatch" style="background:#dbecff;"></span>
+					Human more favorable
+				</div>
+				<div class="eval-legend-item">
+					<span class="eval-swatch" style="background:#ede9fe;"></span>
+					LLM more favorable
+				</div>
+			</div>
+		</div>
+
+		<div class="eval-grid">
+			{initial_html}
+			{final_html}
 		</div>
 	</div>
 	"""
 
-	st.markdown(component_html, unsafe_allow_html=True)
+	components.html(component_html, height=380, scrolling=False)

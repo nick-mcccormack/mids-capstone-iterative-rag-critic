@@ -1,8 +1,11 @@
 import os
 import streamlit as st
+import html
 
 from data.doc_loader import get_raw_results
 from utils.helpers import _go_to_query_selector, _render_labeled_heading
+from textwrap import dedent
+
 
 QUERY_TABLE_COLUMNS = [
 	"question",
@@ -127,17 +130,53 @@ def pick_query() -> None:
 	-------
 	None
 	"""
-	st.caption("**General Execution Plan: Retrieve → Rerank → Generate → Critique → [Decompose]**")
-	st.caption(
-		"An initial RAG answer is evaluated for groundedness and completeness. "
-		"If it passes, it is returned. If not, the query is decomposed into "
-		"targeted step-queries that are retrieved and answered sequentially, "
-		"with dependencies carried forward. The results are aggregated into a "
-		"revised answer, which is re-evaluated. This loop continues until the "
-		"answer passes or a maximum iteration limit is reached."
+	header_html = dedent(
+		"""
+		<div style="margin-bottom:1.05rem;">
+			<div style="
+				font-size:1.08rem;
+				font-weight:700;
+				line-height:1.2;
+				margin-bottom:0.28rem;
+				color:#111827;
+				text-align:left;
+			">
+				Query Details
+			</div>
+
+			<div style="
+				font-size:0.95rem;
+				font-weight:600;
+				color:#6b7280;
+				line-height:1.45;
+				margin-bottom:0.75rem;
+			">
+				Workflow: Retrieve + Rerank → Initial Answer → Critic Check → Decompose + Regenerate
+			</div>
+
+			<div style="
+				font-size:0.92rem;
+				color:#6b7280;
+				line-height:1.45;
+				margin-bottom:0.75rem;
+			">
+				Failed initial answers trigger decomposition into targeted step-queries,
+				whose results are used to regenerate and re-evaluate the answer.
+			</div>
+
+			<div style="
+				font-size:0.92rem;
+				font-style:italic;
+				color:#6b7280;
+				line-height:1.45;
+			">
+				Select a query from the evaluation dataset to trace its execution.
+			</div>
+		</div>
+		"""
 	)
 
-	st.caption("*Select a query from the evaluation dataset to trace its execution.*")
+	st.html(header_html)
 
 	display_df = st.session_state["formatted_results"][QUERY_TABLE_COLUMNS]
 	selection = st.dataframe(
@@ -204,20 +243,49 @@ def render_workflow(max_critic_loops: int) -> None:
 		"final_contexts": raw.get("final_contexts", []),
 	}
 
-	_render_labeled_heading(header="Query:", text=original_query)
-	_render_labeled_heading(header="Gold Answer:", text=gold_answer)
+	header_html = dedent(
+		f"""
+		<div style="margin-bottom:1.05rem;">
+			<div style="
+				font-size:1.08rem;
+				font-weight:700;
+				line-height:1.2;
+				margin-bottom:0.28rem;
+				color:#111827;
+			">
+				Execution Details
+			</div>
 
-	st.divider()
+			<div style="
+				font-size:0.92rem;
+				color:#6b7280;
+				line-height:1.55;
+			">
+				<div style="margin-bottom:0.25rem;">
+					<span style="font-weight:600;color:#111827;">Query:</span>
+					{html.escape(original_query)}
+				</div>
 
-	with st.expander("Initial Retrieve and Rerank"):
+				<div>
+					<span style="font-weight:600;color:#111827;">Gold Answer:</span>
+					{html.escape(gold_answer)}
+				</div>
+			</div>
+		</div>
+		"""
+	)
+
+	st.html(header_html)
+
+	with st.expander(":blue-background[Initial Retrieve and Rerank]"):
 		st.json(initial_contexts, expanded=1)
 
-	with st.expander("Initial Answer"):
+	with st.expander(":blue-background[Initial Answer]"):
 		st.json(initial_answer)
 
 	step_idx = 0
 	for idx, critic_round in enumerate(critic_rounds):
-		with st.expander(f"Critique {idx + 1}"):
+		with st.expander(f":yellow-background[Loop {idx + 1} - Critic Check]"):
 			critic_output = critic_round.get("critic_output", {}) or {}
 			response = {
 				"current_answer": critic_round.get("current_answer", ""),
@@ -245,21 +313,26 @@ def render_workflow(max_critic_loops: int) -> None:
 		if idx >= len(plans):
 			continue
 
-		with st.expander(f"Decomposition {idx + 1}"):
+		with st.expander(f":red-background[Loop {idx + 1} - Decompose + Regenerate]"):
 			plan_steps = plans[idx].get("plan", []) or []
 			for step_num, _ in enumerate(plan_steps, start=1):
 				if step_idx >= len(step_executions):
 					break
 
 				step = step_executions[step_idx]
-				_render_labeled_heading(header=f"Step {step_num}:")
+				st.markdown(f"**Step {step_num}:**")
 				st.json(_build_step_display(step), expanded=1)
 
 				step_idx += 1
 				if step.get("status") != "completed":
 					break
+			st.markdown(f"**New Answer:**")
+			new_answer = {
+				f"regenerated_answer_{idx + 1}": critic_rounds[idx + 1]["current_answer"]
+			}
+			st.json(new_answer)
 
-	with st.expander("Final Answer"):
+	with st.expander(":green-background[Final Answer]"):
 		st.json(final_response, expanded=1)
 
 	st.divider()
