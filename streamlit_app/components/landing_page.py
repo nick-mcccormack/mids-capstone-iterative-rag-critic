@@ -1,5 +1,6 @@
 import os
 import base64
+import mimetypes
 from textwrap import dedent
 
 import streamlit as st
@@ -8,8 +9,8 @@ import streamlit as st
 WORKFLOW_PATH = os.path.join(os.getcwd(), "images", "workflow.jpg")
 
 
-def _image_to_base64(path: str) -> str:
-	"""Convert image file to a base64 string.
+def _image_to_base64(path: str) -> tuple[str, str]:
+	"""Convert image file to a base64 string and detect MIME type.
 
 	Parameters
 	----------
@@ -18,11 +19,17 @@ def _image_to_base64(path: str) -> str:
 
 	Returns
 	-------
-	str
-		Base64-encoded image content.
+	tuple[str, str]
+		A tuple containing the MIME type and base64-encoded image content.
 	"""
+	mime_type, _ = mimetypes.guess_type(path)
+	if mime_type is None:
+		mime_type = "image/jpeg"
+
 	with open(path, "rb") as file_obj:
-		return base64.b64encode(file_obj.read()).decode()
+		img_b64 = base64.b64encode(file_obj.read()).decode()
+
+	return mime_type, img_b64
 
 
 def render_landing_page() -> None:
@@ -33,6 +40,12 @@ def render_landing_page() -> None:
 	None
 		Render-only function. Outputs directly to Streamlit.
 	"""
+	if not os.path.exists(WORKFLOW_PATH):
+		st.error(f"Image not found: {WORKFLOW_PATH}")
+		return
+
+	mime_type, img_b64 = _image_to_base64(WORKFLOW_PATH)
+
 	st.html(
 		dedent(
 			"""
@@ -131,7 +144,6 @@ def render_landing_page() -> None:
 			.landing-image-wrap {
 				margin-top: 1.5rem;
 				padding: 0.9rem;
-				border: 1px solid #e5e7eb;
 				border-radius: 14px;
 				background: #ffffff;
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -143,7 +155,7 @@ def render_landing_page() -> None:
 
 	st.html(
 		dedent(
-			"""
+			f"""
 <div class="landing-page">
 	<div class="landing-hero">
 		<div class="landing-kicker">Generate–Critique–Decompose</div>
@@ -207,82 +219,72 @@ def render_landing_page() -> None:
 
 	<div class="landing-section solution">
 		<div class="landing-section-label">Our Solution</div>
+
 		<div class="landing-section-title">
-			Critic-Guided Iterative RAG with Conditional
-			Decomposition
+			Critic-Guided Iterative RAG with Conditional Decomposition
 		</div>
+
 		<div class="landing-highlight">
 			Retrieve → Rerank → Generate → Critique →
 			(Decompose + Regenerate)
 		</div>
+
 		<div class="landing-copy">
 			<p>
-				The system extends a standard RAG pipeline by
-				introducing a critic-driven feedback loop on top of
-				an initial retrieve → rerank → generate pass. As
-				shown in the workflow, the process begins with
-				initial retrieval and reranking, followed by
-				generation of an initial answer using the retrieved
-				contexts.
+				The system extends a standard RAG pipeline by introducing a
+				critic-driven feedback loop on top of an initial retrieve →
+				rerank → generate pass. As shown in the workflow, the process
+				begins with initial retrieval and reranking, followed by
+				generation of an initial answer using the retrieved contexts.
 			</p>
 
 			<p>
-				An LLM-based critic then evaluates the answer for
-				grounding (faithfulness to retrieved contexts) and
-				completeness. If the answer passes the critic check,
-				it is returned as the final answer.
+				An LLM-based critic then evaluates the answer for grounding
+				(faithfulness to retrieved contexts) and completeness. If the
+				answer passes the critic check, it is returned as the final
+				answer.
 			</p>
 
 			<p>
-				If the answer fails, the system enters the critic
-				loop, where it performs decomposition and
-				regeneration. The original query is broken into
-				targeted sub-queries, additional evidence is
-				retrieved, and a new answer is generated using the
-				expanded context. This updated answer is then
-				re-evaluated by the critic.
+				If the answer fails, the system enters the critic loop, where
+				it performs decomposition and regeneration. The original query
+				is broken into targeted sub-queries, additional evidence is
+				retrieved, and a new answer is generated using the expanded
+				context. This updated answer is then re-evaluated by the
+				critic.
 			</p>
 
 			<p>
 				This retrieve → generate → critique →
-				(decompose + regenerate) loop continues for a
-				bounded number of iterations (up to three rounds) or
-				until the critic passes the answer.
+				(decompose + regenerate) loop continues for a bounded number
+				of iterations (up to three rounds) or until the critic passes
+				the answer.
 			</p>
 
 			<p>
-				By introducing this structured feedback mechanism,
-				the system moves beyond single-pass generation and
-				enables targeted recovery from common RAG failure
-				modes, including missing or incomplete context and
-				errors in multi-hop reasoning. The result is a more
-				reliable and grounded answer generation process,
-				particularly for complex queries requiring
+				By introducing this structured feedback mechanism, the system
+				moves beyond single-pass generation and enables targeted
+				recovery from common RAG failure modes, including missing or
+				incomplete context and errors in multi-hop reasoning. The
+				result is a more reliable and grounded answer generation
+				process, particularly for complex queries requiring
 				multi-step reasoning.
 			</p>
 		</div>
+
+		<div class="landing-image-wrap">
+			<img
+				src="data:{mime_type};base64,{img_b64}"
+				style="
+					width:100%;
+					height:auto;
+					border-radius:12px;
+					display:block;
+				"
+			/>
+		</div>
 	</div>
 </div>
-			"""
-		)
-	)
-
-	img_b64 = _image_to_base64(WORKFLOW_PATH)
-
-	st.html(
-		dedent(
-			f"""
-			<div class="landing-image-wrap">
-				<img
-					src="data:image/jpeg;base64,{img_b64}"
-					style="
-						width:100%;
-						height:auto;
-						border-radius:12px;
-						display:block;
-					"
-				/>
-			</div>
 			"""
 		)
 	)
