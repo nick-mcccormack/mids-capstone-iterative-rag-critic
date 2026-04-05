@@ -3,10 +3,11 @@ import os
 import streamlit as st
 
 from components.sidebar import get_sidebar
+from components.landing_page import render_landing_page
 from components.query_details import pick_query, render_workflow
 from components.summary_results import render_metrics_table
 from components.evaluation_calibration import render_evaluation_calibration
-from utils.helpers import _center_header, get_rag_citations
+from utils.helpers import get_rag_citations
 from utils.initialize_state import state_init
 from utils.config import get_rag_config
 
@@ -33,9 +34,11 @@ def main() -> None:
 
 	st.session_state["formatted_results"] = get_sidebar()
 
-	tab1, tab2 = st.tabs(["Summary", "Details"])
-
+	tab1, tab2, tab3 = st.tabs(["About", "Summary", "Details"])
 	with tab1:
+		render_landing_page()
+
+	with tab2:
 		with st.expander("Evaluation Summary", expanded=True):		
 			render_metrics_table()
 		
@@ -45,12 +48,12 @@ def main() -> None:
 		st.divider()
 
 		with st.expander("RAG Config"):
-				st.json(get_rag_config())
+			st.json(get_rag_config())
 
 		with st.expander("Citations"):
-				st.markdown(get_rag_citations())
+			st.markdown(get_rag_citations())
 	
-	with tab2:
+	with tab3:
 		if st.session_state["page"] == "query_selector":
 			pick_query()	
 		else:
