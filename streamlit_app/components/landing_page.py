@@ -84,8 +84,8 @@ def render_landing_page() -> None:
 			}
 
 			.landing-section.solution {
-				border-left: 6px solid #FDB515;
-				background: #fff8e1;
+				border-left: 6px solid #5B2C83;
+				background: #ede9fe;
 			}
 
 			.landing-section-label {
